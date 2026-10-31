@@ -574,7 +574,8 @@ impl Profile {
             }
         }
         for record in store::deliveries(&connection)? {
-            if record.direction == Direction::Outgoing && !seen_outgoing.contains(&record.parcel_id) {
+            if record.direction == Direction::Outgoing && !seen_outgoing.contains(&record.parcel_id)
+            {
                 self.mark_outgoing_failed(&connection, &record.parcel_id)?;
                 summary.conflicts.push(format!(
                     "{}: local outgoing parcel is missing",

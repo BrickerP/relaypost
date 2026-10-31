@@ -672,8 +672,12 @@ fn unverified_display_names_cannot_shadow_a_pinned_full_fingerprint() {
     let impostor_a = Profile::open(pair.root.join("impostor-a")).unwrap();
     let impostor_b = Profile::open(pair.root.join("impostor-b")).unwrap();
     // These cards are valid and self-signed, but have never been trusted.
-    impostor_a.initialize(&pair.bob_card.fingerprint, PASSWORD).unwrap();
-    impostor_b.initialize(&pair.alice_card.fingerprint, PASSWORD).unwrap();
+    impostor_a
+        .initialize(&pair.bob_card.fingerprint, PASSWORD)
+        .unwrap();
+    impostor_b
+        .initialize(&pair.alice_card.fingerprint, PASSWORD)
+        .unwrap();
     let card_a = pair.root.join("impostor-a.card");
     let card_b = pair.root.join("impostor-b.card");
     impostor_a.export_card(&card_a).unwrap();
@@ -686,14 +690,20 @@ fn unverified_display_names_cannot_shadow_a_pinned_full_fingerprint() {
     let inspection = pair.bob.inspect_parcel(&parcel).unwrap();
     assert_eq!(inspection.sender, pair.alice_card.fingerprint);
     assert_eq!(inspection.recipient, pair.bob_card.fingerprint);
-    assert_payload(&pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record,
-        b"full fingerprints select the pinned identities");
+    assert_payload(
+        &pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record,
+        b"full fingerprints select the pinned identities",
+    );
 }
 
 fn outgoing_state(profile: &Profile, parcel_id: &str) -> DeliveryState {
-    profile.deliveries().unwrap().into_iter()
+    profile
+        .deliveries()
+        .unwrap()
+        .into_iter()
         .find(|record| record.direction == Direction::Outgoing && record.parcel_id == parcel_id)
-        .expect("known outgoing delivery").state
+        .expect("known outgoing delivery")
+        .state
 }
 
 #[test]
@@ -705,28 +715,52 @@ fn outgoing_recovery_marks_active_damage_failed_and_restores_only_verified_parce
     copy_tree(original, &backup);
     corrupt(&shard(original, 0, 0));
     assert!(!pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Failed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Failed
+    );
     fs::copy(shard(&backup, 0, 0), shard(original, 0, 0)).unwrap();
     assert!(pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Ready);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Ready
+    );
     fs::remove_dir_all(original).unwrap();
     assert!(!pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Failed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Failed
+    );
     copy_tree(&backup, original);
     assert!(pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Ready);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Ready
+    );
 
     pair.alice.cancel(&record.parcel_id).unwrap();
     corrupt(&shard(original, 0, 0));
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Cancelled);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Cancelled
+    );
     fs::remove_dir_all(original).unwrap();
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Cancelled);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Cancelled
+    );
     copy_tree(&backup, original);
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Cancelled);
-    assert!(pair.alice.export_parcel(&record.parcel_id, &pair.root.join("cancel-still-blocks")).is_err());
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Cancelled
+    );
+    assert!(pair
+        .alice
+        .export_parcel(&record.parcel_id, &pair.root.join("cancel-still-blocks"))
+        .is_err());
 }
 
 #[test]
@@ -736,7 +770,10 @@ fn verified_acknowledgments_override_failed_indexes_and_confirmation_survives_ou
     let original = record.parcel_path.as_ref().unwrap();
     let parcel = pair.export(&record, "confirmed-carrier");
     pair.bob.receive_parcel(&parcel, PASSWORD).unwrap();
-    let receipt = pair.bob.export_receipt(&record.parcel_id, &pair.root.join("confirmed-return")).unwrap();
+    let receipt = pair
+        .bob
+        .export_receipt(&record.parcel_id, &pair.root.join("confirmed-return"))
+        .unwrap();
     let mut confirmed = pair.alice.import_receipt(&receipt).unwrap();
     assert_eq!(confirmed.state, DeliveryState::Confirmed);
     // Reproduce an index update lost after the verified acknowledgment became
@@ -746,15 +783,27 @@ fn verified_acknowledgments_override_failed_indexes_and_confirmation_survives_ou
     database.execute("UPDATE deliveries SET record_json = ?1 WHERE parcel_id = ?2 AND direction = 'Outgoing'",
         rusqlite::params![serde_json::to_string(&confirmed).unwrap(), record.parcel_id]).unwrap();
     drop(database);
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Failed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Failed
+    );
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Confirmed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Confirmed
+    );
     corrupt(&shard(original, 0, 0));
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Confirmed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Confirmed
+    );
     fs::remove_dir_all(original).unwrap();
     pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(outgoing_state(&pair.alice, &record.parcel_id), DeliveryState::Confirmed);
+    assert_eq!(
+        outgoing_state(&pair.alice, &record.parcel_id),
+        DeliveryState::Confirmed
+    );
 }
 
 #[test]
@@ -764,9 +813,16 @@ fn exports_cannot_write_into_any_managed_profile_tree() {
     let parcel = pair.export(&record, "external-carrier");
     let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap();
     let input = pair.input("return-payload.txt", b"independent reverse direction");
-    let reverse = pair.bob.seal(&[input], &pair.alice_card.fingerprint, PASSWORD).unwrap();
+    let reverse = pair
+        .bob
+        .seal(&[input], &pair.alice_card.fingerprint, PASSWORD)
+        .unwrap();
     let bob_home = pair.root.join("bob");
-    for directory in [bob_home.clone(), bob_home.join("identity"), bob_home.join("outbox")] {
+    for directory in [
+        bob_home.clone(),
+        bob_home.join("identity"),
+        bob_home.join("outbox"),
+    ] {
         let identity_before = tree_digest(&bob_home.join("identity"));
         let outbox_before = tree_digest(&bob_home.join("outbox"));
         let target = directory.join("forbidden-export.card");
@@ -775,15 +831,32 @@ fn exports_cannot_write_into_any_managed_profile_tree() {
         assert_eq!(tree_digest(&bob_home.join("identity")), identity_before);
         assert_eq!(tree_digest(&bob_home.join("outbox")), outbox_before);
     }
-    for carrier in [received.record.received_path.as_ref().unwrap().clone(),
-        bob_home.join("receipts").join(&record.parcel_id), bob_home.join("outbox")] {
+    for carrier in [
+        received.record.received_path.as_ref().unwrap().clone(),
+        bob_home.join("receipts").join(&record.parcel_id),
+        bob_home.join("outbox"),
+    ] {
         let before = tree_digest(&carrier);
-        assert!(pair.bob.export_parcel(&reverse.parcel_id, &carrier).is_err());
-        assert!(pair.bob.export_receipt(&record.parcel_id, &carrier).is_err());
+        assert!(pair
+            .bob
+            .export_parcel(&reverse.parcel_id, &carrier)
+            .is_err());
+        assert!(pair
+            .bob
+            .export_receipt(&record.parcel_id, &carrier)
+            .is_err());
         assert_eq!(tree_digest(&carrier), before);
     }
-    assert_payload(&pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record,
-        b"managed files must remain immutable on export");
-    let receipt = pair.bob.export_receipt(&record.parcel_id, &pair.root.join("valid-external-return")).unwrap();
-    assert_eq!(pair.alice.import_receipt(&receipt).unwrap().state, DeliveryState::Confirmed);
+    assert_payload(
+        &pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record,
+        b"managed files must remain immutable on export",
+    );
+    let receipt = pair
+        .bob
+        .export_receipt(&record.parcel_id, &pair.root.join("valid-external-return"))
+        .unwrap();
+    assert_eq!(
+        pair.alice.import_receipt(&receipt).unwrap().state,
+        DeliveryState::Confirmed
+    );
 }
