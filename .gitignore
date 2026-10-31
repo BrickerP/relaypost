@@ -1,0 +1,11 @@
+/target/
+/.relaypost/
+*.age
+*.minisig
+*.identity
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.DS_Store
+/artifacts/
+
