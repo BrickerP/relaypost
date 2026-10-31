@@ -151,7 +151,7 @@ def main():
     # synthetic output. This is a crash-window fixture, not a power-loss test.
     prepared_stage = root / "bob/inbox/.staging/batch-SYNTHETIC-demo-ready"
     prepared_stage.mkdir(mode=0o700)
-    shutil.move(str(destination), prepared_stage / "batch")
+    shutil.move(str(destination.parent), prepared_stage / "batch")
     (prepared_stage / "archive.tar").write_bytes(b"SYNTHETIC retained plaintext archive")
     (prepared_stage / "ciphertext.age").write_bytes(b"SYNTHETIC retained ciphertext")
     connection = sqlite3.connect(root / "bob/state.sqlite3")

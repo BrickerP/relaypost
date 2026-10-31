@@ -930,7 +930,12 @@ fn stage_received_batch(pair: &Pair, received: &ParcelRecord, keep_published: bo
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&staging, fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let published = received.received_path.as_ref().unwrap();
+    let published = received
+        .received_path
+        .as_ref()
+        .unwrap()
+        .parent()
+        .expect("received files live inside their authenticated batch");
     if keep_published {
         copy_tree(published, &staging.join("batch"));
     } else {
