@@ -3,12 +3,15 @@ use crate::{fsutil, GroupInspection};
 use anyhow::{ensure, Context, Result};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use sha2::{Digest, Sha256};
-use std::io::{Read, Write};
 use std::fs;
+use std::io::{Read, Write};
 use std::path::Path;
 
 fn encode_group(bytes: &[u8], index: usize) -> Result<(Group, Vec<Vec<u8>>)> {
-    ensure!(!bytes.is_empty() && bytes.len() as u64 <= GROUP_BYTES, "invalid group size");
+    ensure!(
+        !bytes.is_empty() && bytes.len() as u64 <= GROUP_BYTES,
+        "invalid group size"
+    );
     let n = bytes.len().div_ceil(MIB as usize);
     let r = n.div_ceil(5);
     let size = bytes.len().div_ceil(n);
@@ -23,10 +26,14 @@ fn encode_group(bytes: &[u8], index: usize) -> Result<(Group, Vec<Vec<u8>>)> {
         data_shards: n,
         parity_shards: r,
         shard_bytes: size,
-        shards: shards.iter().enumerate().map(|(j, data)| Shard {
-            path: format::shard_path(index, j),
-            sha256: fsutil::digest(data),
-        }).collect(),
+        shards: shards
+            .iter()
+            .enumerate()
+            .map(|(j, data)| Shard {
+                path: format::shard_path(index, j),
+                sha256: fsutil::digest(data),
+            })
+            .collect(),
     };
     Ok((group, shards))
 }
@@ -34,7 +41,10 @@ fn encode_group(bytes: &[u8], index: usize) -> Result<(Group, Vec<Vec<u8>>)> {
 pub(crate) fn encode(input: &Path, parcel: &Path) -> Result<(String, u64, Vec<Group>)> {
     let mut reader = fsutil::open_read(input)?;
     let length = reader.metadata()?.len();
-    ensure!(length > 0 && length <= format::MAX_CIPHERTEXT, "ciphertext exceeds limit");
+    ensure!(
+        length > 0 && length <= format::MAX_CIPHERTEXT,
+        "ciphertext exceeds limit"
+    );
     let mut remaining = length;
     let mut groups = Vec::new();
     let mut hash = Sha256::new();
@@ -52,7 +62,10 @@ pub(crate) fn encode(input: &Path, parcel: &Path) -> Result<(String, u64, Vec<Gr
         remaining -= bytes.len() as u64;
     }
     let mut extra = [0];
-    ensure!(reader.read(&mut extra)? == 0, "ciphertext changed during encoding");
+    ensure!(
+        reader.read(&mut extra)? == 0,
+        "ciphertext changed during encoding"
+    );
     Ok((hex::encode(hash.finalize()), length, groups))
 }
 
@@ -69,7 +82,10 @@ fn load_group(parcel: &Path, group: &Group) -> Result<Vec<Option<Vec<u8>>>> {
             current.push(component);
             match fs::symlink_metadata(&current) {
                 Ok(meta) => {
-                    ensure!(!meta.file_type().is_symlink(), "symbolic link in parcel shard path");
+                    ensure!(
+                        !meta.file_type().is_symlink(),
+                        "symbolic link in parcel shard path"
+                    );
                     if current == path {
                         ensure!(meta.is_file(), "special file in parcel shard path");
                     } else {
@@ -81,7 +97,11 @@ fn load_group(parcel: &Path, group: &Group) -> Result<Vec<Option<Vec<u8>>>> {
             }
         }
         let bytes = match fsutil::read_bounded(&path, group.shard_bytes as u64) {
-            Ok(bytes) if bytes.len() == group.shard_bytes && fsutil::digest(&bytes) == shard.sha256 => Some(bytes),
+            Ok(bytes)
+                if bytes.len() == group.shard_bytes && fsutil::digest(&bytes) == shard.sha256 =>
+            {
+                Some(bytes)
+            }
             _ => None,
         };
         shards.push(bytes);
@@ -90,37 +110,66 @@ fn load_group(parcel: &Path, group: &Group) -> Result<Vec<Option<Vec<u8>>>> {
 }
 
 pub(crate) fn inspect(parcel: &Path, groups: &[Group]) -> Result<Vec<GroupInspection>> {
-    groups.iter().map(|group| {
-        let shards = load_group(parcel, group)?;
-        let missing_shards: Vec<usize> = shards.iter().enumerate().filter_map(|(i, s)| s.is_none().then_some(i)).collect();
-        Ok(GroupInspection {
-            index: group.index,
-            data_shards: group.data_shards,
-            parity_shards: group.parity_shards,
-            valid_shards: shards.len() - missing_shards.len(),
-            recoverable: missing_shards.len() <= group.parity_shards,
-            missing_shards,
+    groups
+        .iter()
+        .map(|group| {
+            let shards = load_group(parcel, group)?;
+            let missing_shards: Vec<usize> = shards
+                .iter()
+                .enumerate()
+                .filter_map(|(i, s)| s.is_none().then_some(i))
+                .collect();
+            Ok(GroupInspection {
+                index: group.index,
+                data_shards: group.data_shards,
+                parity_shards: group.parity_shards,
+                valid_shards: shards.len() - missing_shards.len(),
+                recoverable: missing_shards.len() <= group.parity_shards,
+                missing_shards,
+            })
         })
-    }).collect()
+        .collect()
 }
 
 fn reconstruct_group(group: &Group, shards: &mut [Option<Vec<u8>>]) -> Result<usize> {
     let missing = shards.iter().filter(|s| s.is_none()).count();
-    ensure!(missing <= group.parity_shards, "group {} exceeds repair budget: {missing} missing/bad shards, budget {}", group.index, group.parity_shards);
+    ensure!(
+        missing <= group.parity_shards,
+        "group {} exceeds repair budget: {missing} missing/bad shards, budget {}",
+        group.index,
+        group.parity_shards
+    );
     let codec = ReedSolomon::new(group.data_shards, group.parity_shards)?;
     codec.reconstruct(shards)?;
     for (i, shard) in shards.iter().enumerate() {
-        let bytes = shard.as_ref().context("decoder failed to reconstruct a shard")?;
-        ensure!(bytes.len() == group.shard_bytes && fsutil::digest(bytes) == group.shards[i].sha256, "reconstructed shard digest mismatch");
+        let bytes = shard
+            .as_ref()
+            .context("decoder failed to reconstruct a shard")?;
+        ensure!(
+            bytes.len() == group.shard_bytes && fsutil::digest(bytes) == group.shards[i].sha256,
+            "reconstructed shard digest mismatch"
+        );
     }
     // Signed hashes make unknown corruption erasures. Verify code consistency
     // too, so an inconsistent signed shard set cannot silently pass.
-    let refs: Vec<&[u8]> = shards.iter().map(|s| s.as_ref().unwrap().as_slice()).collect();
-    ensure!(codec.verify(&refs)?, "authenticated shard set is not a valid codeword");
+    let refs: Vec<&[u8]> = shards
+        .iter()
+        .map(|s| s.as_ref().unwrap().as_slice())
+        .collect();
+    ensure!(
+        codec.verify(&refs)?,
+        "authenticated shard set is not a valid codeword"
+    );
     Ok(missing)
 }
 
-pub(crate) fn reconstruct(parcel: &Path, groups: &[Group], output: &Path, expected_id: &str, expected_bytes: u64) -> Result<usize> {
+pub(crate) fn reconstruct(
+    parcel: &Path,
+    groups: &[Group],
+    output: &Path,
+    expected_id: &str,
+    expected_bytes: u64,
+) -> Result<usize> {
     let mut file = fsutil::create_new(output)?;
     let mut total = 0;
     let mut repaired = 0;
@@ -134,13 +183,19 @@ pub(crate) fn reconstruct(parcel: &Path, groups: &[Group], output: &Path, expect
             let count = remaining.min(bytes.len());
             file.write_all(&bytes[..count])?;
             hash.update(&bytes[..count]);
-            ensure!(bytes[count..].iter().all(|b| *b == 0), "nonzero authenticated padding");
+            ensure!(
+                bytes[count..].iter().all(|b| *b == 0),
+                "nonzero authenticated padding"
+            );
             remaining -= count;
             total += count as u64;
         }
         ensure!(remaining == 0, "group output length mismatch");
     }
-    ensure!(total == expected_bytes && hex::encode(hash.finalize()) == expected_id, "reconstructed ciphertext digest mismatch");
+    ensure!(
+        total == expected_bytes && hex::encode(hash.finalize()) == expected_id,
+        "reconstructed ciphertext digest mismatch"
+    );
     file.sync_all()?;
     Ok(repaired)
 }
@@ -151,7 +206,10 @@ pub(crate) fn copy_exact(parcel: &Path, output: &Path, groups: &[Group]) -> Resu
         fsutil::private_dir(&dir)?;
         for shard in &group.shards {
             let bytes = fsutil::read_bounded(&parcel.join(&shard.path), group.shard_bytes as u64)?;
-            ensure!(bytes.len() == group.shard_bytes && fsutil::digest(&bytes) == shard.sha256, "local immutable parcel is damaged");
+            ensure!(
+                bytes.len() == group.shard_bytes && fsutil::digest(&bytes) == shard.sha256,
+                "local immutable parcel is damaged"
+            );
             fsutil::write_new(&output.join(&shard.path), &bytes)?;
         }
     }
@@ -165,7 +223,11 @@ mod tests {
 
     fn repaired_bytes(group: &Group, shards: &mut [Option<Vec<u8>>]) -> Result<Vec<u8>> {
         reconstruct_group(group, shards)?;
-        let mut bytes: Vec<u8> = shards.iter().take(group.data_shards).flat_map(|s| s.as_ref().unwrap().iter().copied()).collect();
+        let mut bytes: Vec<u8> = shards
+            .iter()
+            .take(group.data_shards)
+            .flat_map(|s| s.as_ref().unwrap().iter().copied())
+            .collect();
         bytes.truncate(group.bytes as usize);
         Ok(bytes)
     }
@@ -173,7 +235,9 @@ mod tests {
     #[test]
     fn every_tail_budget_and_padding() -> Result<()> {
         for n in 1usize..20 {
-            let bytes: Vec<u8> = (0..((n - 1) * MIB as usize + 17)).map(|i| (i % 251) as u8).collect();
+            let bytes: Vec<u8> = (0..((n - 1) * MIB as usize + 17))
+                .map(|i| (i % 251) as u8)
+                .collect();
             let (group, shards) = encode_group(&bytes, 0)?;
             assert_eq!(group.data_shards, n);
             assert_eq!(group.parity_shards, n.div_ceil(5));

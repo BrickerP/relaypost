@@ -77,7 +77,7 @@ pub(crate) fn output_directory(path: &Path) -> Result<std::path::PathBuf> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir_all(path)?,
         Err(error) => return Err(error.into()),
-        Ok(_) => {},
+        Ok(_) => {}
     }
     let canonical = selected_directory(path)?;
     if let Some(parent) = canonical.parent() {
@@ -279,7 +279,10 @@ mod tests {
         assert!(staging.join("replacement").exists());
         let fresh = root.join("fresh");
         publish_noreplace(&staging, &fresh)?;
-        assert_eq!(fs::read(fresh.join("replacement"))?, b"synthetic replacement");
+        assert_eq!(
+            fs::read(fresh.join("replacement"))?,
+            b"synthetic replacement"
+        );
         Ok(())
     }
 }

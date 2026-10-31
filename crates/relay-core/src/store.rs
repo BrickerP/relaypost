@@ -101,17 +101,12 @@ pub(crate) fn trust(connection: &Connection, fingerprint: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn resolve(connection: &Connection, value: &str) -> Result<crate::PeerCard> {
-    let mut matches = contacts(connection)?
+pub(crate) fn resolve(connection: &Connection, fingerprint: &str) -> Result<crate::PeerCard> {
+    fsutil::check_id(fingerprint)?;
+    let selected = contacts(connection)?
         .into_iter()
-        .filter(|c| c.card.fingerprint == value || c.card.name == value);
-    let selected = matches
-        .next()
+        .find(|contact| contact.card.fingerprint == fingerprint)
         .ok_or_else(|| anyhow::anyhow!("recipient contact not found"))?;
-    ensure!(
-        matches.next().is_none(),
-        "contact name is ambiguous; use its full fingerprint"
-    );
     ensure!(
         selected.verified,
         "contact fingerprint must be explicitly trusted first"

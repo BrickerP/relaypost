@@ -2,6 +2,7 @@ name: Verify and package
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -91,6 +92,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: linux-core-cli
+          cache-on-failure: true
       - name: Test core and CLI
         shell: bash
         run: |
@@ -134,6 +136,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: macos-arm64-native
+          cache-on-failure: true
       - name: Test core and CLI on the native publication implementation
         shell: bash
         run: |
@@ -157,7 +160,7 @@ jobs:
           set -o pipefail
           python3 scripts/demo.py --binary target/release/relaypost --output "$RUNNER_TEMP/relaypost-demo" 2>&1 | tee ci-logs/demo.log
           cp "$RUNNER_TEMP/relaypost-demo/demo-report.json" ci-logs/demo-report.json
-      - name: Package unsigned native application
+      - name: Package ad-hoc signed native application
         shell: bash
         run: scripts/package-macos.sh target/release dist
       - uses: actions/upload-artifact@v4

@@ -107,6 +107,9 @@ impl RelayApp {
         if self.busy() {
             return;
         }
+        if matches!(&action, Action::Seal(..)) {
+            self.invalidate_sealed();
+        }
         self.error = None;
         self.notice.clear();
         let label = action.label();
@@ -350,11 +353,16 @@ impl RelayApp {
                     .width(320.0)
                     .show_ui(ui, |ui| {
                         for contact in &trusted {
-                            ui.selectable_value(
-                                &mut self.recipient,
-                                contact.card.fingerprint.clone(),
-                                &contact.card.name,
-                            );
+                            if ui
+                                .selectable_value(
+                                    &mut self.recipient,
+                                    contact.card.fingerprint.clone(),
+                                    &contact.card.name,
+                                )
+                                .changed()
+                            {
+                                self.invalidate_sealed();
+                            }
                         }
                     });
                 if let Some(contact) = trusted
@@ -388,6 +396,7 @@ impl RelayApp {
                 {
                     self.inputs.clear();
                     self.selected_bytes = Some(0);
+                    self.invalidate_sealed();
                 }
                 let size = self
                     .selected_bytes
@@ -486,8 +495,16 @@ impl RelayApp {
     }
 
     fn measure_inputs(&mut self, context: &egui::Context) {
+        self.invalidate_sealed();
         self.selected_bytes = None;
         self.start(context, Action::Measure(self.inputs.clone()));
+    }
+
+    fn invalidate_sealed(&mut self) {
+        self.sealed_id = None;
+        self.sealed_inspection = None;
+        self.sealed_file_bytes = None;
+        self.notice.clear();
     }
 
     fn receive_screen(&mut self, ui: &mut Ui) {
@@ -1040,7 +1057,7 @@ fn configure_style(context: &egui::Context) {
     let mut style = (*context.style()).clone();
     style.visuals.override_text_color = Some(INK);
     style.visuals.selection.bg_fill = Color32::from_rgb(208, 232, 224);
-    style.visuals.selection.stroke = egui::Stroke::new(1.0, TEAL);
+    style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, TEAL);
     style.visuals.widgets.active.bg_fill = Color32::from_rgb(212, 233, 225);
     style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(229, 240, 233);
     style.spacing.item_spacing = egui::vec2(10.0, 9.0);
@@ -1072,7 +1089,7 @@ fn section_label(ui: &mut Ui, label: &str) {
 fn surface(ui: &mut Ui, contents: impl FnOnce(&mut Ui)) {
     egui::Frame::new()
         .fill(Color32::WHITE)
-        .stroke(egui::Stroke::new(1.0, LINE))
+        .stroke(egui::Stroke::new(1.0_f32, LINE))
         .corner_radius(8)
         .inner_margin(egui::Margin::same(18))
         .show(ui, |ui| {
