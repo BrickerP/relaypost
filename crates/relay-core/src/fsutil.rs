@@ -16,7 +16,9 @@ pub(crate) fn digest(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn valid_digest(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 pub(crate) fn check_id(s: &str) -> Result<()> {
@@ -27,18 +29,29 @@ pub(crate) fn check_id(s: &str) -> Result<()> {
 pub(crate) fn no_symlink_components(path: &Path) -> Result<()> {
     let mut current = std::path::PathBuf::new();
     for component in path.components() {
-        ensure!(!matches!(component, Component::ParentDir), "parent path components are forbidden");
+        ensure!(
+            !matches!(component, Component::ParentDir),
+            "parent path components are forbidden"
+        );
         current.push(component.as_os_str());
         let meta = fs::symlink_metadata(&current)
             .with_context(|| format!("cannot inspect {}", current.display()))?;
-        ensure!(!meta.file_type().is_symlink(), "symbolic link refused: {}", current.display());
+        ensure!(
+            !meta.file_type().is_symlink(),
+            "symbolic link refused: {}",
+            current.display()
+        );
     }
     Ok(())
 }
 
 pub(crate) fn directory(path: &Path) -> Result<()> {
     let meta = fs::symlink_metadata(path)?;
-    ensure!(meta.is_dir() && !meta.file_type().is_symlink(), "not a real directory: {}", path.display());
+    ensure!(
+        meta.is_dir() && !meta.file_type().is_symlink(),
+        "not a real directory: {}",
+        path.display()
+    );
     Ok(())
 }
 
@@ -52,7 +65,6 @@ pub(crate) fn private_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 /// A user-selected root may have OS aliases among its ancestors (for example
 /// /var on macOS). Resolve those once; never resolve links inside a parcel,
 /// published batch or private application subtree.
@@ -61,10 +73,29 @@ pub(crate) fn selected_directory(path: &Path) -> Result<std::path::PathBuf> {
     Ok(fs::canonicalize(path)?)
 }
 
+pub(crate) fn output_directory(path: &Path) -> Result<std::path::PathBuf> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir_all(path)?,
+        Err(error) => return Err(error.into()),
+        Ok(_) => {},
+    }
+    let canonical = selected_directory(path)?;
+    if let Some(parent) = canonical.parent() {
+        sync_dir(parent)?;
+    }
+    Ok(canonical)
+}
+
 pub(crate) fn selected_file(path: &Path) -> Result<std::path::PathBuf> {
     let meta = fs::symlink_metadata(path)?;
-    ensure!(meta.is_file() && !meta.file_type().is_symlink(), "selected file must be a regular file, not a symbolic link");
-    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    ensure!(
+        meta.is_file() && !meta.file_type().is_symlink(),
+        "selected file must be a regular file, not a symbolic link"
+    );
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let parent = fs::canonicalize(parent)?;
     Ok(parent.join(path.file_name().context("selected file has no name")?))
 }
@@ -75,14 +106,24 @@ pub(crate) fn open_read(path: &Path) -> Result<File> {
     options.read(true);
     #[cfg(unix)]
     options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    let file = options.open(path).with_context(|| format!("cannot open {}", path.display()))?;
-    ensure!(file.metadata()?.is_file(), "not a regular file: {}", path.display());
+    let file = options
+        .open(path)
+        .with_context(|| format!("cannot open {}", path.display()))?;
+    ensure!(
+        file.metadata()?.is_file(),
+        "not a regular file: {}",
+        path.display()
+    );
     Ok(file)
 }
 
 pub(crate) fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>> {
     let mut file = open_read(path)?;
-    ensure!(file.metadata()?.len() <= max, "file exceeds resource limit: {}", path.display());
+    ensure!(
+        file.metadata()?.len() <= max,
+        "file exceeds resource limit: {}",
+        path.display()
+    );
     let mut bytes = Vec::new();
     (&mut file).take(max + 1).read_to_end(&mut bytes)?;
     ensure!(bytes.len() as u64 <= max, "file grew beyond resource limit");
@@ -95,7 +136,9 @@ pub(crate) fn create_new(path: &Path) -> Result<File> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
-    options.mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    options
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
     Ok(options.open(path)?)
 }
 
@@ -108,7 +151,9 @@ pub(crate) fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 
 pub(crate) fn sync_dir(path: &Path) -> Result<()> {
     directory(path)?;
-    File::open(path)?.sync_all().with_context(|| format!("directory sync unsupported: {}", path.display()))?;
+    File::open(path)?
+        .sync_all()
+        .with_context(|| format!("directory sync unsupported: {}", path.display()))?;
     Ok(())
 }
 
@@ -120,7 +165,10 @@ pub(crate) fn sync_tree(path: &Path) -> Result<()> {
         if meta.is_dir() {
             sync_tree(&entry.path())?;
         } else {
-            ensure!(meta.is_file() && !meta.file_type().is_symlink(), "special file in private staging");
+            ensure!(
+                meta.is_file() && !meta.file_type().is_symlink(),
+                "special file in private staging"
+            );
             open_read(&entry.path())?.sync_all()?;
         }
     }
@@ -138,12 +186,23 @@ pub(crate) fn publish_noreplace(source: &Path, destination: &Path) -> Result<()>
         let to = CString::new(destination.as_os_str().as_bytes())?;
         #[cfg(target_os = "linux")]
         let result = unsafe {
-            libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, from.as_ptr(), libc::AT_FDCWD, to.as_ptr(), libc::RENAME_NOREPLACE)
+            libc::syscall(
+                libc::SYS_renameat2,
+                libc::AT_FDCWD,
+                from.as_ptr(),
+                libc::AT_FDCWD,
+                to.as_ptr(),
+                libc::RENAME_NOREPLACE,
+            )
         };
         #[cfg(target_os = "macos")]
-        let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) as libc::c_long };
+        let result = unsafe {
+            libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) as libc::c_long
+        };
         if result != 0 {
-            return Err(std::io::Error::last_os_error()).context("atomic no-replace publication failed (target must support exclusive rename)");
+            return Err(std::io::Error::last_os_error()).context(
+                "atomic no-replace publication failed (target must support exclusive rename)",
+            );
         }
         sync_dir(destination.parent().context("destination has no parent")?)?;
         Ok(())
@@ -157,7 +216,9 @@ pub(crate) fn lock(home: &Path) -> Result<File> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true).truncate(false);
     #[cfg(unix)]
-    options.mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    options
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
     let file = options.open(path)?;
     file.lock_exclusive()?;
     Ok(file)
@@ -165,7 +226,10 @@ pub(crate) fn lock(home: &Path) -> Result<File> {
 
 pub(crate) fn available_space(path: &Path, needed: u64) -> Result<()> {
     let available = fs2::available_space(path)?;
-    ensure!(available >= needed, "insufficient space: need {needed} bytes, available {available}");
+    ensure!(
+        available >= needed,
+        "insufficient space: need {needed} bytes, available {available}"
+    );
     Ok(())
 }
 
@@ -180,11 +244,11 @@ pub(crate) fn sqlite_timeout() -> Duration {
 pub(crate) fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
     // All protocol structs use deny_unknown_fields. Serde's derived struct
     // visitors reject duplicate fields (including nested records).
-    Ok(serde_json::from_slice(bytes).context("invalid or ambiguous JSON record")?)
+    serde_json::from_slice(bytes).context("invalid or ambiguous JSON record")
 }
 
 pub(crate) fn utf8(bytes: &[u8]) -> Result<&str> {
-    Ok(std::str::from_utf8(bytes).context("record is not UTF-8")?)
+    std::str::from_utf8(bytes).context("record is not UTF-8")
 }
 
 pub(crate) fn assert_absent(path: &Path) -> Result<()> {
@@ -192,5 +256,30 @@ pub(crate) fn assert_absent(path: &Path) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.into()),
         Ok(_) => anyhow::bail!("destination already exists: {}", path.display()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn atomic_publication_never_replaces_existing_directory() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        let existing = root.join("committed");
+        private_dir(&existing)?;
+        write_new(&existing.join("original"), b"synthetic original")?;
+        let staging = root.join("staging");
+        private_dir(&staging)?;
+        write_new(&staging.join("replacement"), b"synthetic replacement")?;
+        assert!(publish_noreplace(&staging, &existing).is_err());
+        assert_eq!(fs::read(existing.join("original"))?, b"synthetic original");
+        assert!(!existing.join("replacement").exists());
+        assert!(staging.join("replacement").exists());
+        let fresh = root.join("fresh");
+        publish_noreplace(&staging, &fresh)?;
+        assert_eq!(fs::read(fresh.join("replacement"))?, b"synthetic replacement");
+        Ok(())
     }
 }

@@ -95,7 +95,7 @@ impl Profile {
         let estimated_raw = inputs.iter().try_fold(0u64, |total, path| -> Result<u64> {
             let meta = fs::symlink_metadata(path)?;
             ensure!(meta.is_file() && !meta.file_type().is_symlink(), "select static regular files only");
-            Ok(total.checked_add(meta.len()).context("raw input size overflow")?)
+            total.checked_add(meta.len()).context("raw input size overflow")
         })?;
         ensure!(estimated_raw <= MAX_RAW, "batch exceeds 64 MiB raw limit");
         fsutil::available_space(&self.home, estimated_raw.saturating_mul(5) + 8 * crate::format::MIB)?;
@@ -140,8 +140,9 @@ impl Profile {
         ensure!(record.state != DeliveryState::Cancelled && !self.cancelled(parcel_id)?, "delivery is cancelled; exported copies cannot be recalled");
         let source = self.home.join("outbox").join(parcel_id);
         let authenticated = self.load_envelope(&source, &connection)?;
+        ensure!(authenticated.envelope.parcel_id == parcel_id, "outgoing directory ID conflicts with envelope");
         ensure!(authenticated.envelope.sender.fingerprint == self.card()?.fingerprint, "outgoing sender identity mismatch");
-        let carrier = fsutil::selected_directory(carrier)?;
+        let carrier = fsutil::output_directory(carrier)?;
         let destination = carrier.join(format!("{parcel_id}.parcel"));
         if fs::symlink_metadata(&destination).is_ok() {
             let existing = self.load_envelope(&destination, &connection)?;
@@ -243,7 +244,7 @@ impl Profile {
         };
         let source = self.home.join("receipts").join(parcel_id);
         let (raw, signature) = self.read_receipt(&source, &authenticated)?;
-        let carrier = fsutil::selected_directory(carrier)?;
+        let carrier = fsutil::output_directory(carrier)?;
         let destination = carrier.join(format!("{parcel_id}.receipt"));
         if fs::symlink_metadata(&destination).is_ok() {
             let (existing_raw, existing_sig) = self.read_receipt(&destination, &authenticated)?;
@@ -493,17 +494,17 @@ impl Profile {
     fn finish_incoming(&self, connection: &Connection, authenticated: &AuthenticatedEnvelope, signing: &minisign::SecretKey) -> Result<ParcelRecord> {
         let envelope = &authenticated.envelope;
         let destination = self.home.join("inbox").join(&envelope.parcel_id);
-        // Index follows publication; receipt follows index. Recovery always
-        // verifies publication content before re-entering this method.
+        // The verified filesystem commit authorizes the durable receipt. Only
+        // then publish SavedReceiptReady in the index; recover can reconstruct
+        // either missing artifact from the authenticated committed batch.
         let now = fsutil::now();
         let mut record = ParcelRecord {
             parcel_id: envelope.parcel_id.clone(), direction: Direction::Incoming,
-            state: DeliveryState::SavedReceiptReady, sender: envelope.sender.fingerprint.clone(),
+            state: DeliveryState::Ready, sender: envelope.sender.fingerprint.clone(),
             recipient: envelope.recipient.fingerprint.clone(), files: envelope.files, total_bytes: envelope.total_bytes,
             parcel_path: None, received_path: Some(destination.join("files")), receipt_path: None,
             created_at: envelope.created_at.clone(), updated_at: now.clone(),
         };
-        store::save(connection, &record)?;
         let receipt_dir = self.home.join("receipts").join(&envelope.parcel_id);
         if fs::symlink_metadata(&receipt_dir).is_ok() {
             self.read_receipt(&receipt_dir, authenticated)?;
@@ -527,6 +528,7 @@ impl Profile {
             self.read_receipt(staging.path(), authenticated)?;
             fsutil::publish_noreplace(staging.path(), &receipt_dir)?;
         }
+        record.state = DeliveryState::SavedReceiptReady;
         record.receipt_path = Some(receipt_dir);
         record.updated_at = fsutil::now();
         store::save(connection, &record)?;
@@ -548,6 +550,69 @@ impl Profile {
             record.updated_at = fsutil::now();
             store::save(connection, &record)?;
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signed_malformed_duplicate_and_conflicting_envelopes_are_refused() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        let alice = Profile::open(root.join("alice"))?;
+        let bob = Profile::open(root.join("bob"))?;
+        let alice_card = alice.initialize("Synthetic Alice", "synthetic-unit-password")?;
+        let bob_card = bob.initialize("Synthetic Bob", "synthetic-unit-password")?;
+        let a_card = root.join("alice.json");
+        let b_card = root.join("bob.json");
+        alice.export_card(&a_card)?;
+        bob.export_card(&b_card)?;
+        alice.import_contact(&b_card)?;
+        bob.import_contact(&a_card)?;
+        alice.trust_contact(&bob_card.fingerprint)?;
+        bob.trust_contact(&alice_card.fingerprint)?;
+        let input = root.join("synthetic.txt");
+        fsutil::write_new(&input, b"synthetic hostile-format fixture")?;
+        let record = alice.seal(&[input], &bob_card.fingerprint, "synthetic-unit-password")?;
+        let parcel = record.parcel_path.context("fixture parcel missing")?;
+        let raw = fs::read(parcel.join("envelope.json"))?;
+        let valid: Envelope = fsutil::json(&raw)?;
+        let signing = identity::unlock(&alice.home.join("identity"), "synthetic-unit-password")?;
+        let replace_copy = |json: &str, signature: &str, bytes: &[u8]| -> Result<()> {
+            fs::write(parcel.join(json), bytes)?;
+            fs::write(parcel.join(signature), identity::sign(&signing.signing, bytes)?.as_bytes())?;
+            Ok(())
+        };
+        for mutation in 0..6 {
+            let mut invalid = valid.clone();
+            match mutation {
+                0 => invalid.schema = 2,
+                1 => invalid.ciphertext_bytes = crate::format::MAX_CIPHERTEXT + 1,
+                2 => invalid.groups[0].shard_bytes = crate::format::MIB as usize + 1,
+                3 => invalid.groups[0].shards[0].path = "../escape".into(),
+                4 => invalid.groups[0].parity_shards += 1,
+                _ => invalid.groups.clear(),
+            }
+            let invalid = serde_json::to_vec(&invalid)?;
+            for (json, signature) in ENVELOPE_COPIES { replace_copy(json, signature, &invalid)?; }
+            assert!(bob.inspect_parcel(&parcel).is_err());
+        }
+        let duplicate = format!("{{\"schema\":1,{}", fsutil::utf8(&raw)?.strip_prefix('{').context("object fixture")?);
+        for (json, signature) in ENVELOPE_COPIES { replace_copy(json, signature, duplicate.as_bytes())?; }
+        assert!(bob.inspect_parcel(&parcel).is_err());
+        replace_copy("envelope.json", "envelope.minisig", &raw)?;
+        let mut conflict = valid.clone();
+        conflict.created_at = "2026-10-31T00:00:00.000Z".into();
+        let conflict = serde_json::to_vec(&conflict)?;
+        assert_ne!(raw, conflict);
+        replace_copy("envelope-copy.json", "envelope-copy.minisig", &conflict)?;
+        assert!(bob.inspect_parcel(&parcel).is_err());
+        // One authenticated copy remains sufficient if the other is damaged.
+        fs::write(parcel.join("envelope-copy.minisig"), b"damaged synthetic signature")?;
+        assert!(bob.inspect_parcel(&parcel)?.recoverable);
         Ok(())
     }
 }

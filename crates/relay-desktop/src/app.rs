@@ -1,6 +1,9 @@
 use crate::work::{self, Action, Completed, Payload};
 use eframe::egui::{self, Color32, RichText, TextEdit, Ui};
-use relay_core::{Contact, DeliveryState, Direction, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary};
+use relay_core::{
+    Contact, DeliveryState, Direction, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult,
+    RecoverySummary,
+};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::Duration;
@@ -182,23 +185,49 @@ impl RelayApp {
 
     fn header(&mut self, context: &egui::Context) {
         egui::TopBottomPanel::top("masthead")
-            .frame(egui::Frame::new().fill(INK).inner_margin(egui::Margin::symmetric(24, 18)))
+            .frame(
+                egui::Frame::new()
+                    .fill(INK)
+                    .inner_margin(egui::Margin::symmetric(24, 18)),
+            )
             .show(context, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("R / P").size(20.0).strong().color(Color32::from_rgb(158, 211, 198)));
+                    ui.label(
+                        RichText::new("R / P")
+                            .size(20.0)
+                            .strong()
+                            .color(Color32::from_rgb(158, 211, 198)),
+                    );
                     ui.add_space(12.0);
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("RelayPost").size(24.0).strong().color(Color32::WHITE));
-                        ui.label(RichText::new("OFFLINE FILE HANDOFFS").size(10.0).color(Color32::from_rgb(177, 192, 200)));
+                        ui.label(
+                            RichText::new("RelayPost")
+                                .size(24.0)
+                                .strong()
+                                .color(Color32::WHITE),
+                        );
+                        ui.label(
+                            RichText::new("OFFLINE FILE HANDOFFS")
+                                .size(10.0)
+                                .color(Color32::from_rgb(177, 192, 200)),
+                        );
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let identity = self.identity.as_ref().map(|card| card.name.as_str()).unwrap_or("Set up this device");
+                        let identity = self
+                            .identity
+                            .as_ref()
+                            .map(|card| card.name.as_str())
+                            .unwrap_or("Set up this device");
                         ui.label(RichText::new(identity).color(Color32::from_rgb(219, 231, 234)));
                     });
                 });
             });
         egui::TopBottomPanel::top("navigation")
-            .frame(egui::Frame::new().fill(Color32::WHITE).inner_margin(egui::Margin::symmetric(24, 12)))
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .inner_margin(egui::Margin::symmetric(24, 12)),
+            )
             .show(context, |ui| {
                 ui.horizontal(|ui| {
                     for (screen, label) in [
@@ -207,7 +236,10 @@ impl RelayApp {
                         (Screen::History, "03  History"),
                         (Screen::Identity, "04  Identity & Contacts"),
                     ] {
-                        if ui.selectable_label(self.screen == screen, RichText::new(label).strong()).clicked() {
+                        if ui
+                            .selectable_label(self.screen == screen, RichText::new(label).strong())
+                            .clicked()
+                        {
                             self.switch_screen(screen);
                         }
                         ui.add_space(15.0);
@@ -218,18 +250,31 @@ impl RelayApp {
 
     fn footer(&self, context: &egui::Context) {
         egui::TopBottomPanel::bottom("status")
-            .frame(egui::Frame::new().fill(Color32::WHITE).inner_margin(egui::Margin::symmetric(24, 12)))
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .inner_margin(egui::Margin::symmetric(24, 12)),
+            )
             .show(context, |ui| {
                 ui.horizontal(|ui| {
                     if let Some(pending) = &self.pending {
                         ui.spinner();
                         ui.label(RichText::new(pending.label).color(TEAL));
                     } else {
-                        ui.label(RichText::new("LOCAL · NO NETWORK REQUIRED").size(10.0).color(MUTED));
+                        ui.label(
+                            RichText::new("LOCAL · NO NETWORK REQUIRED")
+                                .size(10.0)
+                                .color(MUTED),
+                        );
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new("Profile").small().color(MUTED)).on_hover_text(self.home.display().to_string());
-                        let keys = if cfg!(target_os = "macos") { "⌘1–4 tabs  ·  ⌘R refresh" } else { "Ctrl+1–4 tabs  ·  Ctrl+R refresh" };
+                        ui.label(RichText::new("Profile").small().color(MUTED))
+                            .on_hover_text(self.home.display().to_string());
+                        let keys = if cfg!(target_os = "macos") {
+                            "⌘1–4 tabs  ·  ⌘R refresh"
+                        } else {
+                            "Ctrl+1–4 tabs  ·  Ctrl+R refresh"
+                        };
                         ui.label(RichText::new(keys).small().color(MUTED));
                     });
                 });
@@ -238,47 +283,84 @@ impl RelayApp {
 
     fn messages(&mut self, ui: &mut Ui) {
         if let Some(error) = self.error.clone() {
-            egui::Frame::new().fill(Color32::from_rgb(253, 238, 234))
-                .inner_margin(egui::Margin::same(14)).corner_radius(6)
+            egui::Frame::new()
+                .fill(Color32::from_rgb(253, 238, 234))
+                .inner_margin(egui::Margin::same(14))
+                .corner_radius(6)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
-                            ui.label(RichText::new("Operation could not finish").strong().color(RED));
+                            ui.label(
+                                RichText::new("Operation could not finish")
+                                    .strong()
+                                    .color(RED),
+                            );
                             ui.label(RichText::new(error).color(RED));
                         });
-                        if ui.small_button("Dismiss").clicked() { self.error = None; }
+                        if ui.small_button("Dismiss").clicked() {
+                            self.error = None;
+                        }
                     });
                 });
             ui.add_space(14.0);
         } else if !self.notice.is_empty() {
-            egui::Frame::new().fill(Color32::from_rgb(230, 242, 235))
-                .inner_margin(egui::Margin::same(14)).corner_radius(6)
-                .show(ui, |ui| { ui.label(RichText::new(&self.notice).color(GREEN)); });
+            egui::Frame::new()
+                .fill(Color32::from_rgb(230, 242, 235))
+                .inner_margin(egui::Margin::same(14))
+                .corner_radius(6)
+                .show(ui, |ui| {
+                    ui.label(RichText::new(&self.notice).color(GREEN));
+                });
             ui.add_space(14.0);
         }
     }
 
     fn send_screen(&mut self, ui: &mut Ui) {
-        page_title(ui, "Prepare a handoff", "Seal a batch for one trusted device, then let a carrier take it there.");
+        page_title(
+            ui,
+            "Prepare a handoff",
+            "Seal a batch for one trusted device, then let a carrier take it there.",
+        );
         if self.identity.is_none() {
-            empty_state(ui, "Create this device's identity first", "Open Identity & Contacts to create an identity and exchange public cards.");
+            empty_state(
+                ui,
+                "Create this device's identity first",
+                "Open Identity & Contacts to create an identity and exchange public cards.",
+            );
             return;
         }
         surface(ui, |ui| {
             section_label(ui, "1  RECIPIENT");
-            let trusted: Vec<_> = self.contacts.iter().filter(|contact| contact.verified).cloned().collect();
+            let trusted: Vec<_> = self
+                .contacts
+                .iter()
+                .filter(|contact| contact.verified)
+                .cloned()
+                .collect();
             if trusted.is_empty() {
                 ui.label("No trusted contacts yet. Import a card and compare its complete fingerprint in Identity & Contacts.");
             } else {
-                let selected = trusted.iter().find(|contact| contact.card.fingerprint == self.recipient)
-                    .map(|contact| contact.card.name.as_str()).unwrap_or("Choose a trusted recipient");
-                egui::ComboBox::from_id_salt("recipient").selected_text(selected).width(320.0)
+                let selected = trusted
+                    .iter()
+                    .find(|contact| contact.card.fingerprint == self.recipient)
+                    .map(|contact| contact.card.name.as_str())
+                    .unwrap_or("Choose a trusted recipient");
+                egui::ComboBox::from_id_salt("recipient")
+                    .selected_text(selected)
+                    .width(320.0)
                     .show_ui(ui, |ui| {
                         for contact in &trusted {
-                            ui.selectable_value(&mut self.recipient, contact.card.fingerprint.clone(), &contact.card.name);
+                            ui.selectable_value(
+                                &mut self.recipient,
+                                contact.card.fingerprint.clone(),
+                                &contact.card.name,
+                            );
                         }
                     });
-                if let Some(contact) = trusted.iter().find(|contact| contact.card.fingerprint == self.recipient) {
+                if let Some(contact) = trusted
+                    .iter()
+                    .find(|contact| contact.card.fingerprint == self.recipient)
+                {
                     fingerprint(ui, &contact.card.fingerprint);
                 }
             }
@@ -288,33 +370,51 @@ impl RelayApp {
             section_label(ui, "2  FILES");
             ui.horizontal(|ui| {
                 if ui.button("Add files…").clicked() {
-                    if let Some(files) = rfd::FileDialog::new().set_title("Choose static regular files").pick_files() {
+                    if let Some(files) = rfd::FileDialog::new()
+                        .set_title("Choose static regular files")
+                        .pick_files()
+                    {
                         for file in files {
-                            if !self.inputs.contains(&file) { self.inputs.push(file); }
+                            if !self.inputs.contains(&file) {
+                                self.inputs.push(file);
+                            }
                         }
                         self.measure_inputs(ui.ctx());
                     }
                 }
-                if ui.add_enabled(!self.inputs.is_empty(), egui::Button::new("Clear")).clicked() {
+                if ui
+                    .add_enabled(!self.inputs.is_empty(), egui::Button::new("Clear"))
+                    .clicked()
+                {
                     self.inputs.clear();
                     self.selected_bytes = Some(0);
                 }
-                let size = self.selected_bytes.map(bytes).unwrap_or_else(|| "size not checked".to_owned());
-                ui.label(RichText::new(format!("{} files · {size}", self.inputs.len())).color(MUTED));
+                let size = self
+                    .selected_bytes
+                    .map(bytes)
+                    .unwrap_or_else(|| "size not checked".to_owned());
+                ui.label(
+                    RichText::new(format!("{} files · {size}", self.inputs.len())).color(MUTED),
+                );
             });
             if self.inputs.is_empty() {
                 ui.add_space(12.0);
                 ui.label(RichText::new("Choose files that have finished writing.").color(MUTED));
             } else {
                 let mut remove = None;
-                egui::ScrollArea::vertical().id_salt("selected_files").max_height(160.0).show(ui, |ui| {
-                    for (index, input) in self.inputs.iter().enumerate() {
-                        ui.horizontal(|ui| {
-                            if ui.small_button("Remove").clicked() { remove = Some(index); }
-                            ui.label(input.display().to_string());
-                        });
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .id_salt("selected_files")
+                    .max_height(160.0)
+                    .show(ui, |ui| {
+                        for (index, input) in self.inputs.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Remove").clicked() {
+                                    remove = Some(index);
+                                }
+                                ui.label(input.display().to_string());
+                            });
+                        }
+                    });
                 if let Some(index) = remove {
                     self.inputs.remove(index);
                     self.measure_inputs(ui.ctx());
@@ -327,25 +427,48 @@ impl RelayApp {
         surface(ui, |ui| {
             section_label(ui, "3  SEAL & EXPORT");
             password_field(ui, &mut self.password);
-            let valid = !self.inputs.is_empty() && self.inputs.len() <= 100
-                && self.selected_bytes.is_some_and(|size| size <= 64 * 1024 * 1024)
-                && self.contacts.iter().any(|contact| contact.verified && contact.card.fingerprint == self.recipient)
+            let valid = !self.inputs.is_empty()
+                && self.inputs.len() <= 100
+                && self
+                    .selected_bytes
+                    .is_some_and(|size| size <= 64 * 1024 * 1024)
+                && self
+                    .contacts
+                    .iter()
+                    .any(|contact| contact.verified && contact.card.fingerprint == self.recipient)
                 && !self.password.is_empty();
             if primary(ui, "Seal new parcel", valid).clicked() {
                 let password = self.take_password();
-                self.start(ui.ctx(), Action::Seal(self.inputs.clone(), self.recipient.clone(), password));
+                self.start(
+                    ui.ctx(),
+                    Action::Seal(self.inputs.clone(), self.recipient.clone(), password),
+                );
             }
             ui.label(RichText::new("Sealing creates a new delivery. To retry an existing one, export it again from History.").small().color(MUTED));
-            let sealed = self.sealed_id.as_ref().and_then(|id| self.deliveries.iter().find(|record| record.parcel_id == *id)).cloned();
+            let sealed = self
+                .sealed_id
+                .as_ref()
+                .and_then(|id| {
+                    self.deliveries
+                        .iter()
+                        .find(|record| record.parcel_id == *id)
+                })
+                .cloned();
             if let Some(record) = sealed {
                 ui.add_space(16.0);
                 ui.separator();
                 draw_record(ui, &record);
                 if let Some(file_bytes) = self.sealed_file_bytes {
-                    ui.label(RichText::new(format!("Exact parcel file size: {}", bytes(file_bytes))).strong());
+                    ui.label(
+                        RichText::new(format!("Exact parcel file size: {}", bytes(file_bytes)))
+                            .strong(),
+                    );
                 }
                 if let Some(inspection) = &self.sealed_inspection {
-                    ui.label(format!("Encrypted content: {}", bytes(inspection.ciphertext_bytes)));
+                    ui.label(format!(
+                        "Encrypted content: {}",
+                        bytes(inspection.ciphertext_bytes)
+                    ));
                     ui.collapsing("Repair groups included in this parcel", |ui| {
                         for group in &inspection.groups {
                             ui.label(format!("Group {}: {} data + {} parity · repairs up to {} unavailable shards", group.index, group.data_shards, group.parity_shards, group.parity_shards));
@@ -353,7 +476,9 @@ impl RelayApp {
                         ui.label(RichText::new("Repair budgets apply separately to each group.").small().color(MUTED));
                     });
                 }
-                if record.state != DeliveryState::Cancelled && ui.button("Export parcel to carrier…").clicked() {
+                if record.state != DeliveryState::Cancelled
+                    && ui.button("Export parcel to carrier…").clicked()
+                {
                     self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                 }
             }
@@ -366,14 +491,30 @@ impl RelayApp {
     }
 
     fn receive_screen(&mut self, ui: &mut Ui) {
-        page_title(ui, "Receive a parcel", "Check the signed envelope and repair budget before saving the batch.");
+        page_title(
+            ui,
+            "Receive a parcel",
+            "Check the signed envelope and repair budget before saving the batch.",
+        );
         surface(ui, |ui| {
             section_label(ui, "1  PARCEL DIRECTORY");
             ui.horizontal(|ui| {
-                let edited = ui.add(TextEdit::singleline(&mut self.parcel_input).hint_text("Path to the parcel directory").desired_width(600.0)).changed();
-                if edited { self.inspection = None; self.received = None; }
+                let edited = ui
+                    .add(
+                        TextEdit::singleline(&mut self.parcel_input)
+                            .hint_text("Path to the parcel directory")
+                            .desired_width(600.0),
+                    )
+                    .changed();
+                if edited {
+                    self.inspection = None;
+                    self.received = None;
+                }
                 if ui.button("Browse…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().set_title("Choose a RelayPost parcel directory").pick_folder() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Choose a RelayPost parcel directory")
+                        .pick_folder()
+                    {
                         self.parcel_input = path.display().to_string();
                         self.inspection = None;
                         self.received = None;
@@ -392,28 +533,72 @@ impl RelayApp {
             surface(ui, |ui| {
                 section_label(ui, "2  AUTHENTICATED SHARD HEALTH");
                 ui.horizontal(|ui| {
-                    let (label, color) = if inspection.recoverable { ("Sufficient shards", GREEN) } else { ("Repair budget exceeded", RED) };
+                    let (label, color) = if inspection.recoverable {
+                        ("Sufficient shards", GREEN)
+                    } else {
+                        ("Repair budget exceeded", RED)
+                    };
                     ui.label(RichText::new(label).strong().color(color));
-                    ui.label(RichText::new(format!("{} ciphertext", bytes(inspection.ciphertext_bytes))).color(MUTED));
+                    ui.label(
+                        RichText::new(format!("{} ciphertext", bytes(inspection.ciphertext_bytes)))
+                            .color(MUTED),
+                    );
                 });
                 ui.add_space(8.0);
                 for group in &inspection.groups {
                     let unavailable = group.missing_shards.len();
-                    let color = if !group.recoverable { RED } else if unavailable > 0 { AMBER } else { GREEN };
-                    ui.label(RichText::new(format!("Group {} · {} data + {} parity · {} valid · {} unavailable", group.index, group.data_shards, group.parity_shards, group.valid_shards, unavailable)).strong().color(color));
+                    let color = if !group.recoverable {
+                        RED
+                    } else if unavailable > 0 {
+                        AMBER
+                    } else {
+                        GREEN
+                    };
+                    ui.label(
+                        RichText::new(format!(
+                            "Group {} · {} data + {} parity · {} valid · {} unavailable",
+                            group.index,
+                            group.data_shards,
+                            group.parity_shards,
+                            group.valid_shards,
+                            unavailable
+                        ))
+                        .strong()
+                        .color(color),
+                    );
                     ui.horizontal_wrapped(|ui| {
                         for index in 0..group.data_shards + group.parity_shards {
                             let missing = group.missing_shards.contains(&index);
                             let parity = index >= group.data_shards;
-                            let fill = if missing { Color32::from_rgb(226, 173, 119) }
-                                else if parity { Color32::from_rgb(111, 155, 174) }
-                                else { Color32::from_rgb(81, 155, 137) };
-                            let (rect, response) = ui.allocate_exact_size(egui::vec2(23.0, 26.0), egui::Sense::hover());
+                            let fill = if missing {
+                                Color32::from_rgb(226, 173, 119)
+                            } else if parity {
+                                Color32::from_rgb(111, 155, 174)
+                            } else {
+                                Color32::from_rgb(81, 155, 137)
+                            };
+                            let (rect, response) = ui
+                                .allocate_exact_size(egui::vec2(23.0, 26.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect.shrink(1.0), 3, fill);
-                            response.on_hover_text(format!("Shard {index} · {} · {}", if parity { "parity" } else { "data" }, if missing { "missing or hash mismatch" } else { "digest verified" }));
+                            response.on_hover_text(format!(
+                                "Shard {index} · {} · {}",
+                                if parity { "parity" } else { "data" },
+                                if missing {
+                                    "missing or hash mismatch"
+                                } else {
+                                    "digest verified"
+                                }
+                            ));
                         }
                     });
-                    ui.label(RichText::new(format!("This group can repair at most {} missing or hash-bad shards.", group.parity_shards)).small().color(MUTED));
+                    ui.label(
+                        RichText::new(format!(
+                            "This group can repair at most {} missing or hash-bad shards.",
+                            group.parity_shards
+                        ))
+                        .small()
+                        .color(MUTED),
+                    );
                     ui.add_space(9.0);
                 }
                 ui.label(RichText::new("Green: verified data   Blue: verified parity   Amber: unavailable / hash mismatch").small().color(MUTED));
@@ -427,9 +612,18 @@ impl RelayApp {
             surface(ui, |ui| {
                 section_label(ui, "3  VERIFY & SAVE");
                 password_field(ui, &mut self.password);
-                if primary(ui, "Repair, verify & save", inspection.recoverable && !self.password.is_empty()).clicked() {
+                if primary(
+                    ui,
+                    "Repair, verify & save",
+                    inspection.recoverable && !self.password.is_empty(),
+                )
+                .clicked()
+                {
                     let password = self.take_password();
-                    self.start(ui.ctx(), Action::Receive(PathBuf::from(&self.parcel_input), password));
+                    self.start(
+                        ui.ctx(),
+                        Action::Receive(PathBuf::from(&self.parcel_input), password),
+                    );
                 }
                 ui.label(RichText::new("A signed receipt is created only after the complete batch is verified and committed.").small().color(MUTED));
             });
@@ -441,9 +635,23 @@ impl RelayApp {
             ui.add_space(14.0);
             surface(ui, |ui| {
                 section_label(ui, "SAVED BATCH");
-                ui.label(RichText::new(format!("{} repaired shards · {}", result.repaired_shards, if result.duplicate { "existing batch verified" } else { "new batch committed" })).strong().color(GREEN));
+                ui.label(
+                    RichText::new(format!(
+                        "{} repaired shards · {}",
+                        result.repaired_shards,
+                        if result.duplicate {
+                            "existing batch verified"
+                        } else {
+                            "new batch committed"
+                        }
+                    ))
+                    .strong()
+                    .color(GREEN),
+                );
                 draw_record(ui, &result.record);
-                if result.record.receipt_path.is_some() && ui.button("Export signed receipt to carrier…").clicked() {
+                if result.record.receipt_path.is_some()
+                    && ui.button("Export signed receipt to carrier…").clicked()
+                {
                     self.choose_receipt_export(ui.ctx(), &result.record.parcel_id);
                 }
                 ui.label(RichText::new("Return the signed receipt to the sender so their delivery can be confirmed.").small().color(MUTED));
@@ -452,11 +660,20 @@ impl RelayApp {
     }
 
     fn history_screen(&mut self, ui: &mut Ui) {
-        page_title(ui, "Handoff history", "Local exports and verified recipient confirmations are distinct facts.");
+        page_title(
+            ui,
+            "Handoff history",
+            "Local exports and verified recipient confirmations are distinct facts.",
+        );
         ui.horizontal(|ui| {
-            if ui.button("Refresh records").clicked() { self.start(ui.ctx(), Action::Refresh); }
+            if ui.button("Refresh records").clicked() {
+                self.start(ui.ctx(), Action::Refresh);
+            }
             if ui.button("Import signed receipt…").clicked() {
-                if let Some(path) = rfd::FileDialog::new().set_title("Choose a signed receipt directory").pick_folder() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_title("Choose a signed receipt directory")
+                    .pick_folder()
+                {
                     self.start(ui.ctx(), Action::ImportReceipt(path));
                 }
             }
@@ -468,34 +685,73 @@ impl RelayApp {
             let records = self.deliveries.clone();
             surface(ui, |ui| {
                 section_label(ui, "DELIVERIES");
-                egui::ScrollArea::vertical().id_salt("delivery_list").max_height(225.0).show(ui, |ui| {
-                    for record in &records {
-                        ui.horizontal(|ui| {
-                            let direction = match record.direction { Direction::Outgoing => "OUT", Direction::Incoming => "IN" };
-                            let label = format!("{direction}  {}   ·   {} files / {}", short(&record.parcel_id), record.files, bytes(record.total_bytes));
-                            if ui.selectable_label(self.selected_delivery.as_deref() == Some(record.parcel_id.as_str()), label).clicked() {
-                                self.selected_delivery = Some(record.parcel_id.clone());
-                            }
-                            state_badge(ui, &record.state);
-                        });
-                        ui.separator();
-                    }
-                });
+                egui::ScrollArea::vertical()
+                    .id_salt("delivery_list")
+                    .max_height(225.0)
+                    .show(ui, |ui| {
+                        for record in &records {
+                            ui.horizontal(|ui| {
+                                let direction = match record.direction {
+                                    Direction::Outgoing => "OUT",
+                                    Direction::Incoming => "IN",
+                                };
+                                let label = format!(
+                                    "{direction}  {}   ·   {} files / {}",
+                                    short(&record.parcel_id),
+                                    record.files,
+                                    bytes(record.total_bytes)
+                                );
+                                if ui
+                                    .selectable_label(
+                                        self.selected_delivery.as_deref()
+                                            == Some(record.parcel_id.as_str()),
+                                        label,
+                                    )
+                                    .clicked()
+                                {
+                                    self.selected_delivery = Some(record.parcel_id.clone());
+                                }
+                                state_badge(ui, &record.state);
+                            });
+                            ui.separator();
+                        }
+                    });
             });
-            let selected = self.selected_delivery.as_ref().and_then(|id| self.deliveries.iter().find(|record| record.parcel_id == *id)).cloned();
+            let selected = self
+                .selected_delivery
+                .as_ref()
+                .and_then(|id| {
+                    self.deliveries
+                        .iter()
+                        .find(|record| record.parcel_id == *id)
+                })
+                .cloned();
             if let Some(record) = selected {
                 ui.add_space(14.0);
                 surface(ui, |ui| {
                     section_label(ui, "DELIVERY DETAILS");
                     draw_record(ui, &record);
                     ui.horizontal(|ui| {
-                        if record.direction == Direction::Outgoing && record.state != DeliveryState::Cancelled {
-                            if ui.button("Export parcel again…").clicked() { self.choose_parcel_export(ui.ctx(), &record.parcel_id); }
-                            if matches!(record.state, DeliveryState::Ready | DeliveryState::WaitingReceipt)
-                                && ui.button("Cancel future exports…").clicked() { self.cancel_id = Some(record.parcel_id.clone()); }
+                        if record.direction == Direction::Outgoing
+                            && record.state != DeliveryState::Cancelled
+                        {
+                            if ui.button("Export parcel again…").clicked() {
+                                self.choose_parcel_export(ui.ctx(), &record.parcel_id);
+                            }
+                            if matches!(
+                                record.state,
+                                DeliveryState::Ready | DeliveryState::WaitingReceipt
+                            ) && ui.button("Cancel future exports…").clicked()
+                            {
+                                self.cancel_id = Some(record.parcel_id.clone());
+                            }
                         }
-                        if record.direction == Direction::Incoming && record.receipt_path.is_some()
-                            && ui.button("Export signed receipt…").clicked() { self.choose_receipt_export(ui.ctx(), &record.parcel_id); }
+                        if record.direction == Direction::Incoming
+                            && record.receipt_path.is_some()
+                            && ui.button("Export signed receipt…").clicked()
+                        {
+                            self.choose_receipt_export(ui.ctx(), &record.parcel_id);
+                        }
                     });
                 });
             } else {
@@ -534,30 +790,55 @@ impl RelayApp {
                     ui.label(format!("Card version {}", card.version));
                 });
                 if ui.button("Export public contact card…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().set_title("Export public contact card")
-                        .set_file_name("relaypost-card.json").add_filter("RelayPost public card", &["json"]).save_file() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Export public contact card")
+                        .set_file_name("relaypost-card.json")
+                        .add_filter("RelayPost public card", &["json"])
+                        .save_file()
+                    {
                         self.start(ui.ctx(), Action::ExportCard(path));
                     }
                 }
                 ui.label(RichText::new("This exports public keys only. Keep your password-protected profile directory safe; it contains the private identity.").small().color(MUTED));
             } else {
-                ui.label("Create a local identity. Its private keys are encrypted with your password.");
+                ui.label(
+                    "Create a local identity. Its private keys are encrypted with your password.",
+                );
                 if let Some(error) = &self.identity_error {
-                    ui.collapsing("Identity status", |ui| { ui.label(RichText::new(error).color(MUTED)); });
+                    ui.collapsing("Identity status", |ui| {
+                        ui.label(RichText::new(error).color(MUTED));
+                    });
                 }
                 ui.label("Device name");
-                ui.add(TextEdit::singleline(&mut self.identity_name).hint_text("e.g. Field notebook").desired_width(400.0));
+                ui.add(
+                    TextEdit::singleline(&mut self.identity_name)
+                        .hint_text("e.g. Field notebook")
+                        .desired_width(400.0),
+                );
                 password_field(ui, &mut self.password);
                 ui.label("Confirm password");
-                ui.add(TextEdit::singleline(&mut *self.confirmation).password(true).desired_width(400.0));
-                let valid = !self.identity_name.trim().is_empty() && !self.password.is_empty() && *self.password == *self.confirmation;
+                ui.add(
+                    TextEdit::singleline(&mut *self.confirmation)
+                        .password(true)
+                        .desired_width(400.0),
+                );
+                let valid = !self.identity_name.trim().is_empty()
+                    && !self.password.is_empty()
+                    && *self.password == *self.confirmation;
                 if primary(ui, "Create device identity", valid).clicked() {
                     let password = self.take_password();
                     self.confirmation.zeroize();
-                    self.start(ui.ctx(), Action::Initialize(self.identity_name.trim().to_owned(), password));
+                    self.start(
+                        ui.ctx(),
+                        Action::Initialize(self.identity_name.trim().to_owned(), password),
+                    );
                 }
                 if !self.confirmation.is_empty() && *self.password != *self.confirmation {
-                    ui.label(RichText::new("Passwords do not match.").small().color(AMBER));
+                    ui.label(
+                        RichText::new("Passwords do not match.")
+                            .small()
+                            .color(AMBER),
+                    );
                 }
             }
         });
@@ -566,21 +847,42 @@ impl RelayApp {
             ui.horizontal(|ui| {
                 section_label(ui, "CONTACTS");
                 if ui.button("Import public card…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new().set_title("Import a public contact card").add_filter("Public card", &["json"]).pick_file() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_title("Import a public contact card")
+                        .add_filter("Public card", &["json"])
+                        .pick_file()
+                    {
                         self.start(ui.ctx(), Action::ImportContact(path));
                     }
                 }
             });
             if self.contacts.is_empty() {
                 ui.add_space(8.0);
-                ui.label(RichText::new("No contacts yet. Ask the other device to export its public card.").color(MUTED));
+                ui.label(
+                    RichText::new(
+                        "No contacts yet. Ask the other device to export its public card.",
+                    )
+                    .color(MUTED),
+                );
             }
             for contact in self.contacts.clone() {
                 ui.add_space(10.0);
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(&contact.card.name).size(17.0).strong());
-                    ui.label(RichText::new(if contact.verified { "FINGERPRINT PINNED" } else { "UNVERIFIED" }).small().color(if contact.verified { GREEN } else { AMBER }));
+                    ui.label(
+                        RichText::new(if contact.verified {
+                            "FINGERPRINT PINNED"
+                        } else {
+                            "UNVERIFIED"
+                        })
+                        .small()
+                        .color(if contact.verified {
+                            GREEN
+                        } else {
+                            AMBER
+                        }),
+                    );
                 });
                 fingerprint(ui, &contact.card.fingerprint);
                 if !contact.verified && ui.button("Verify complete fingerprint…").clicked() {
@@ -599,13 +901,19 @@ impl RelayApp {
     }
 
     fn choose_parcel_export(&mut self, context: &egui::Context, id: &str) {
-        if let Some(carrier) = rfd::FileDialog::new().set_title("Choose carrier directory for the parcel").pick_folder() {
+        if let Some(carrier) = rfd::FileDialog::new()
+            .set_title("Choose carrier directory for the parcel")
+            .pick_folder()
+        {
             self.start(context, Action::ExportParcel(id.to_owned(), carrier));
         }
     }
 
     fn choose_receipt_export(&mut self, context: &egui::Context, id: &str) {
-        if let Some(carrier) = rfd::FileDialog::new().set_title("Choose carrier directory for the signed receipt").pick_folder() {
+        if let Some(carrier) = rfd::FileDialog::new()
+            .set_title("Choose carrier directory for the signed receipt")
+            .pick_folder()
+        {
             self.start(context, Action::ExportReceipt(id.to_owned(), carrier));
         }
     }
@@ -613,24 +921,48 @@ impl RelayApp {
     fn dialogs(&mut self, context: &egui::Context) {
         if let Some(contact) = self.trust_contact.clone() {
             let mut close = false;
-            egui::Window::new("Pin a verified contact").collapsible(false).resizable(false).default_width(570.0).show(context, |ui| {
-                ui.add_enabled_ui(!self.busy(), |ui| {
-                    ui.label(format!("Compare {}'s full fingerprint in person or through a trusted channel.", contact.card.name));
-                    fingerprint(ui, &contact.card.fingerprint);
-                    ui.add_space(10.0);
-                    ui.label("Paste the complete fingerprint you independently confirmed");
-                    ui.add(TextEdit::singleline(&mut self.trust_fingerprint).desired_width(f32::INFINITY));
-                    ui.add_space(10.0);
-                    ui.horizontal(|ui| {
-                        if primary(ui, "Pin verified fingerprint", self.trust_fingerprint.trim() == contact.card.fingerprint).clicked() {
-                            self.start(context, Action::Trust(contact.card.fingerprint.clone()));
-                            close = true;
-                        }
-                        if ui.button("Cancel").clicked() { close = true; }
+            egui::Window::new("Pin a verified contact")
+                .collapsible(false)
+                .resizable(false)
+                .default_width(570.0)
+                .show(context, |ui| {
+                    ui.add_enabled_ui(!self.busy(), |ui| {
+                        ui.label(format!(
+                            "Compare {}'s full fingerprint in person or through a trusted channel.",
+                            contact.card.name
+                        ));
+                        fingerprint(ui, &contact.card.fingerprint);
+                        ui.add_space(10.0);
+                        ui.label("Paste the complete fingerprint you independently confirmed");
+                        ui.add(
+                            TextEdit::singleline(&mut self.trust_fingerprint)
+                                .desired_width(f32::INFINITY),
+                        );
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            if primary(
+                                ui,
+                                "Pin verified fingerprint",
+                                self.trust_fingerprint.trim() == contact.card.fingerprint,
+                            )
+                            .clicked()
+                            {
+                                self.start(
+                                    context,
+                                    Action::Trust(contact.card.fingerprint.clone()),
+                                );
+                                close = true;
+                            }
+                            if ui.button("Cancel").clicked() {
+                                close = true;
+                            }
+                        });
                     });
                 });
-            });
-            if close { self.trust_contact = None; self.trust_fingerprint.clear(); }
+            if close {
+                self.trust_contact = None;
+                self.trust_fingerprint.clear();
+            }
         }
         if let Some(id) = self.cancel_id.clone() {
             let mut close = false;
@@ -647,7 +979,9 @@ impl RelayApp {
                     });
                 });
             });
-            if close { self.cancel_id = None; }
+            if close {
+                self.cancel_id = None;
+            }
         }
     }
 
@@ -658,9 +992,13 @@ impl RelayApp {
             (egui::Key::Num3, Screen::History),
             (egui::Key::Num4, Screen::Identity),
         ] {
-            if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, key)) { self.switch_screen(screen); }
+            if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, key)) {
+                self.switch_screen(screen);
+            }
         }
-        if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::R)) && !self.busy() {
+        if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::R))
+            && !self.busy()
+        {
             self.start(context, Action::Refresh);
         }
     }
@@ -672,20 +1010,28 @@ impl eframe::App for RelayApp {
         self.shortcuts(context);
         self.header(context);
         self.footer(context);
-        egui::CentralPanel::default().frame(egui::Frame::new().fill(PAPER).inner_margin(egui::Margin::same(24))).show(context, |ui| {
-            egui::ScrollArea::vertical().id_salt("page").show(ui, |ui| {
-                self.messages(ui);
-                ui.add_enabled_ui(!self.busy(), |ui| match self.screen {
-                    Screen::Send => self.send_screen(ui),
-                    Screen::Receive => self.receive_screen(ui),
-                    Screen::History => self.history_screen(ui),
-                    Screen::Identity => self.identity_screen(ui),
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(PAPER)
+                    .inner_margin(egui::Margin::same(24)),
+            )
+            .show(context, |ui| {
+                egui::ScrollArea::vertical().id_salt("page").show(ui, |ui| {
+                    self.messages(ui);
+                    ui.add_enabled_ui(!self.busy(), |ui| match self.screen {
+                        Screen::Send => self.send_screen(ui),
+                        Screen::Receive => self.receive_screen(ui),
+                        Screen::History => self.history_screen(ui),
+                        Screen::Identity => self.identity_screen(ui),
+                    });
+                    ui.add_space(20.0);
                 });
-                ui.add_space(20.0);
             });
-        });
         self.dialogs(context);
-        if self.busy() { context.request_repaint_after(Duration::from_millis(100)); }
+        if self.busy() {
+            context.request_repaint_after(Duration::from_millis(100));
+        }
     }
 }
 
@@ -700,9 +1046,15 @@ fn configure_style(context: &egui::Context) {
     style.spacing.item_spacing = egui::vec2(10.0, 9.0);
     style.spacing.button_padding = egui::vec2(14.0, 8.0);
     style.spacing.interact_size.y = 32.0;
-    style.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
-    style.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
-    style.text_styles.insert(egui::TextStyle::Heading, egui::FontId::proportional(28.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Heading, egui::FontId::proportional(28.0));
     context.set_style(style);
 }
 
@@ -718,15 +1070,22 @@ fn section_label(ui: &mut Ui, label: &str) {
 }
 
 fn surface(ui: &mut Ui, contents: impl FnOnce(&mut Ui)) {
-    egui::Frame::new().fill(Color32::WHITE).stroke(egui::Stroke::new(1.0, LINE))
-        .corner_radius(8).inner_margin(egui::Margin::same(18)).show(ui, |ui| {
+    egui::Frame::new()
+        .fill(Color32::WHITE)
+        .stroke(egui::Stroke::new(1.0, LINE))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(18))
+        .show(ui, |ui| {
             ui.set_width(ui.available_width());
             contents(ui);
         });
 }
 
 fn primary(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
-    ui.add_enabled(enabled, egui::Button::new(RichText::new(text).strong().color(Color32::WHITE)).fill(TEAL))
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(RichText::new(text).strong().color(Color32::WHITE)).fill(TEAL),
+    )
 }
 
 fn empty_state(ui: &mut Ui, title: &str, body: &str) {
@@ -741,26 +1100,47 @@ fn empty_state(ui: &mut Ui, title: &str, body: &str) {
 fn password_field(ui: &mut Ui, password: &mut Zeroizing<String>) {
     ui.add_space(5.0);
     ui.label("Identity password · for this operation only");
-    ui.add(TextEdit::singleline(&mut **password).password(true).desired_width(400.0).hint_text("Password"));
+    ui.add(
+        TextEdit::singleline(&mut **password)
+            .password(true)
+            .desired_width(400.0)
+            .hint_text("Password"),
+    );
     ui.add_space(5.0);
 }
 
 fn fingerprint(ui: &mut Ui, text: &str) {
-    ui.label(RichText::new("COMPLETE FINGERPRINT").size(10.0).color(MUTED));
+    ui.label(
+        RichText::new("COMPLETE FINGERPRINT")
+            .size(10.0)
+            .color(MUTED),
+    );
     value(ui, "", text);
 }
 
 fn value(ui: &mut Ui, label: &str, text: &str) {
-    if !label.is_empty() { ui.label(RichText::new(label).small().color(MUTED)); }
+    if !label.is_empty() {
+        ui.label(RichText::new(label).small().color(MUTED));
+    }
     let mut text = text;
-    ui.add(TextEdit::multiline(&mut text).font(egui::TextStyle::Monospace).desired_rows(1).desired_width(ui.available_width()).frame(false));
+    ui.add(
+        TextEdit::multiline(&mut text)
+            .font(egui::TextStyle::Monospace)
+            .desired_rows(1)
+            .desired_width(ui.available_width())
+            .frame(false),
+    );
 }
 
 fn draw_record(ui: &mut Ui, record: &ParcelRecord) {
     state_badge(ui, &record.state);
     ui.label(state_description(&record.state));
     ui.add_space(6.0);
-    ui.label(format!("{} files · {} original data", record.files, bytes(record.total_bytes)));
+    ui.label(format!(
+        "{} files · {} original data",
+        record.files,
+        bytes(record.total_bytes)
+    ));
     value(ui, "Parcel", &record.parcel_id);
     ui.collapsing("Identities & local times", |ui| {
         value(ui, "Sender", &record.sender);
@@ -768,9 +1148,15 @@ fn draw_record(ui: &mut Ui, record: &ParcelRecord) {
         ui.label(format!("Created locally: {}", record.created_at));
         ui.label(format!("Last local update: {}", record.updated_at));
     });
-    if let Some(path) = &record.parcel_path { value(ui, "Local sealed parcel", &path.display().to_string()); }
-    if let Some(path) = &record.received_path { value(ui, "Saved batch", &path.display().to_string()); }
-    if let Some(path) = &record.receipt_path { value(ui, "Signed receipt", &path.display().to_string()); }
+    if let Some(path) = &record.parcel_path {
+        value(ui, "Local sealed parcel", &path.display().to_string());
+    }
+    if let Some(path) = &record.received_path {
+        value(ui, "Saved batch", &path.display().to_string());
+    }
+    if let Some(path) = &record.receipt_path {
+        value(ui, "Signed receipt", &path.display().to_string());
+    }
 }
 
 fn state_badge(ui: &mut Ui, state: &DeliveryState) {
@@ -797,12 +1183,19 @@ fn state_description(state: &DeliveryState) -> &'static str {
 }
 
 fn bytes(value: u64) -> String {
-    if value >= 1024 * 1024 { format!("{:.2} MiB", value as f64 / (1024.0 * 1024.0)) }
-    else if value >= 1024 { format!("{:.1} KiB", value as f64 / 1024.0) }
-    else { format!("{value} bytes") }
+    if value >= 1024 * 1024 {
+        format!("{:.2} MiB", value as f64 / (1024.0 * 1024.0))
+    } else if value >= 1024 {
+        format!("{:.1} KiB", value as f64 / 1024.0)
+    } else {
+        format!("{value} bytes")
+    }
 }
 
 fn short(value: &str) -> String {
-    if value.chars().count() > 18 { format!("{}…", value.chars().take(18).collect::<String>()) }
-    else { value.to_owned() }
+    if value.chars().count() > 18 {
+        format!("{}…", value.chars().take(18).collect::<String>())
+    } else {
+        value.to_owned()
+    }
 }

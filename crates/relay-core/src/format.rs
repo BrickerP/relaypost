@@ -46,26 +46,58 @@ pub(crate) struct Envelope {
 
 impl Envelope {
     pub fn validate(&self) -> Result<()> {
-        ensure!(self.kind == "relaypost.parcel" && self.schema == 1, "unsupported parcel format");
+        ensure!(
+            self.kind == "relaypost.parcel" && self.schema == 1,
+            "unsupported parcel format"
+        );
         fsutil::check_id(&self.parcel_id)?;
         fsutil::check_id(&self.manifest_sha256)?;
-        ensure!(self.ciphertext_bytes > 0 && self.ciphertext_bytes <= MAX_CIPHERTEXT, "ciphertext length out of bounds");
-        ensure!(self.files > 0 && self.files <= MAX_FILES && self.total_bytes <= MAX_RAW, "raw content limits exceeded");
-        ensure!(self.created_at.len() <= 64 && chrono::DateTime::parse_from_rfc3339(&self.created_at).is_ok(), "invalid creation time");
-        ensure!(!self.groups.is_empty() && self.groups.len() <= 4, "invalid group count");
+        ensure!(
+            self.ciphertext_bytes > 0 && self.ciphertext_bytes <= MAX_CIPHERTEXT,
+            "ciphertext length out of bounds"
+        );
+        ensure!(
+            self.files > 0 && self.files <= MAX_FILES && self.total_bytes <= MAX_RAW,
+            "raw content limits exceeded"
+        );
+        ensure!(
+            self.created_at.len() <= 64
+                && chrono::DateTime::parse_from_rfc3339(&self.created_at).is_ok(),
+            "invalid creation time"
+        );
+        ensure!(
+            !self.groups.is_empty() && self.groups.len() <= 4,
+            "invalid group count"
+        );
         let expected_groups = self.ciphertext_bytes.div_ceil(GROUP_BYTES) as usize;
-        ensure!(self.groups.len() == expected_groups, "noncanonical group partition");
+        ensure!(
+            self.groups.len() == expected_groups,
+            "noncanonical group partition"
+        );
         let mut remaining = self.ciphertext_bytes;
         for (i, group) in self.groups.iter().enumerate() {
             let bytes = remaining.min(GROUP_BYTES);
             let n = bytes.div_ceil(MIB) as usize;
             let r = n.div_ceil(5);
             let size = bytes.div_ceil(n as u64) as usize;
-            ensure!(group.index == i && group.bytes == bytes && group.data_shards == n && group.parity_shards == r && group.shard_bytes == size, "invalid authenticated group parameters");
-            ensure!(n >= 1 && n <= 20 && n + r <= 24 && size > 0 && size <= MIB as usize, "group exceeds resource limits");
+            ensure!(
+                group.index == i
+                    && group.bytes == bytes
+                    && group.data_shards == n
+                    && group.parity_shards == r
+                    && group.shard_bytes == size,
+                "invalid authenticated group parameters"
+            );
+            ensure!(
+                (1..=20).contains(&n) && n + r <= 24 && size > 0 && size <= MIB as usize,
+                "group exceeds resource limits"
+            );
             ensure!(group.shards.len() == n + r, "invalid shard count");
             for (j, shard) in group.shards.iter().enumerate() {
-                ensure!(shard.path == shard_path(i, j), "unsafe or noncanonical shard path");
+                ensure!(
+                    shard.path == shard_path(i, j),
+                    "unsafe or noncanonical shard path"
+                );
                 fsutil::check_id(&shard.sha256)?;
             }
             remaining -= bytes;
@@ -122,7 +154,10 @@ impl Prepared {
     }
     pub fn verify(&self, envelope: &Envelope, raw: &[u8]) -> Result<()> {
         let expected = Self::for_envelope(envelope, raw);
-        ensure!(serde_json::to_vec(self)? == serde_json::to_vec(&expected)?, "published commit metadata conflicts with envelope");
+        ensure!(
+            serde_json::to_vec(self)? == serde_json::to_vec(&expected)?,
+            "published commit metadata conflicts with envelope"
+        );
         Ok(())
     }
 }
@@ -143,10 +178,26 @@ pub(crate) struct Receipt {
 
 impl Receipt {
     pub fn validate(&self, envelope: &Envelope, envelope_raw: &[u8]) -> Result<()> {
-        ensure!(self.kind == "relaypost.receipt" && self.schema == 1 && self.result == "committed", "unsupported receipt");
-        ensure!(self.parcel_id == envelope.parcel_id && self.envelope_sha256 == fsutil::digest(envelope_raw) && self.manifest_sha256 == envelope.manifest_sha256, "receipt does not bind this exact parcel");
-        ensure!(self.recipient == envelope.recipient.fingerprint && self.signing_public_key == envelope.recipient.signing_public_key, "wrong receipt signing identity");
-        ensure!(self.committed_at.len() <= 64 && chrono::DateTime::parse_from_rfc3339(&self.committed_at).is_ok(), "invalid receipt time");
+        ensure!(
+            self.kind == "relaypost.receipt" && self.schema == 1 && self.result == "committed",
+            "unsupported receipt"
+        );
+        ensure!(
+            self.parcel_id == envelope.parcel_id
+                && self.envelope_sha256 == fsutil::digest(envelope_raw)
+                && self.manifest_sha256 == envelope.manifest_sha256,
+            "receipt does not bind this exact parcel"
+        );
+        ensure!(
+            self.recipient == envelope.recipient.fingerprint
+                && self.signing_public_key == envelope.recipient.signing_public_key,
+            "wrong receipt signing identity"
+        );
+        ensure!(
+            self.committed_at.len() <= 64
+                && chrono::DateTime::parse_from_rfc3339(&self.committed_at).is_ok(),
+            "invalid receipt time"
+        );
         Ok(())
     }
 }

@@ -1,5 +1,7 @@
 use anyhow::{bail, Context, Result};
-use relay_core::{Contact, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary};
+use relay_core::{
+    Contact, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary,
+};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -90,70 +92,136 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
                 if !metadata.is_file() || metadata.file_type().is_symlink() {
                     bail!("Select static regular files only: {}", input.display());
                 }
-                total = total.checked_add(metadata.len()).context("Selected file sizes overflow")?;
+                total = total
+                    .checked_add(metadata.len())
+                    .context("Selected file sizes overflow")?;
             }
             (String::new(), Payload::Measured(total))
         }
         Action::Initialize(name, password) => {
             profile.initialize(&name, &password)?;
-            ("Identity created. Exchange public cards and compare complete fingerprints.".to_owned(), Payload::None)
+            (
+                "Identity created. Exchange public cards and compare complete fingerprints."
+                    .to_owned(),
+                Payload::None,
+            )
         }
         Action::ExportCard(output) => {
             profile.export_card(&output)?;
-            (format!("Public card exported to {}", output.display()), Payload::None)
+            (
+                format!("Public card exported to {}", output.display()),
+                Payload::None,
+            )
         }
         Action::ImportContact(input) => {
             let contact = profile.import_contact(&input)?;
-            (format!("Imported {}. Compare the complete fingerprint before pinning trust.", contact.card.name), Payload::None)
+            (
+                format!(
+                    "Imported {}. Compare the complete fingerprint before pinning trust.",
+                    contact.card.name
+                ),
+                Payload::None,
+            )
         }
         Action::Trust(fingerprint) => {
             profile.trust_contact(&fingerprint)?;
-            ("Contact fingerprint pinned. The other device must also trust your card.".to_owned(), Payload::None)
+            (
+                "Contact fingerprint pinned. The other device must also trust your card."
+                    .to_owned(),
+                Payload::None,
+            )
         }
         Action::Seal(inputs, recipient, password) => {
             let record = profile.seal(&inputs, &recipient, &password)?;
-            let path = record.parcel_path.as_deref().context("Sealed parcel has no local path")?;
+            let path = record
+                .parcel_path
+                .as_deref()
+                .context("Sealed parcel has no local path")?;
             let inspection = profile.inspect_parcel(path)?;
             let file_bytes = directory_file_bytes(path)?;
-            ("Parcel sealed. Choose a carrier directory to export it.".to_owned(), Payload::Sealed(Box::new(SealedDetails { record, inspection, file_bytes })))
+            (
+                "Parcel sealed. Choose a carrier directory to export it.".to_owned(),
+                Payload::Sealed(Box::new(SealedDetails {
+                    record,
+                    inspection,
+                    file_bytes,
+                })),
+            )
         }
         Action::ExportParcel(id, carrier) => {
             let output = profile.export_parcel(&id, &carrier)?;
-            (format!("Parcel exported to {}. Awaiting a verified signed receipt.", output.display()), Payload::None)
+            (
+                format!(
+                    "Parcel exported to {}. Awaiting a verified signed receipt.",
+                    output.display()
+                ),
+                Payload::None,
+            )
         }
         Action::Inspect(parcel) => {
             let inspection = profile.inspect_parcel(&parcel)?;
-            let notice = if inspection.recoverable { "Signed envelope verified. Shards are sufficient to attempt receiving." }
-                else { "Signed envelope verified, but at least one group exceeds its repair budget." };
+            let notice = if inspection.recoverable {
+                "Signed envelope verified. Shards are sufficient to attempt receiving."
+            } else {
+                "Signed envelope verified, but at least one group exceeds its repair budget."
+            };
             (notice.to_owned(), Payload::Inspected(inspection))
         }
         Action::Receive(parcel, password) => {
             let result = profile.receive_parcel(&parcel, &password)?;
-            let notice = if result.duplicate { "Previously saved batch verified. The existing delivery is reused." }
-                else { "Batch verified and saved. Its signed receipt is ready to carry back." };
+            let notice = if result.duplicate {
+                "Previously saved batch verified. The existing delivery is reused."
+            } else {
+                "Batch verified and saved. Its signed receipt is ready to carry back."
+            };
             (notice.to_owned(), Payload::Received(Box::new(result)))
         }
         Action::ExportReceipt(id, carrier) => {
             let output = profile.export_receipt(&id, &carrier)?;
-            (format!("Signed receipt exported to {}. Carry it back to the sender.", output.display()), Payload::None)
+            (
+                format!(
+                    "Signed receipt exported to {}. Carry it back to the sender.",
+                    output.display()
+                ),
+                Payload::None,
+            )
         }
         Action::ImportReceipt(receipt) => {
             let record = profile.import_receipt(&receipt)?;
-            (format!("Recipient's signed confirmation verified for {}.", record.parcel_id), Payload::None)
+            (
+                format!(
+                    "Recipient's signed confirmation verified for {}.",
+                    record.parcel_id
+                ),
+                Payload::None,
+            )
         }
         Action::Recover(password) => {
             let summary = profile.recover(&password)?;
-            let notice = format!("Recovery finished: {} recovered, {} pending, {} conflicts.", summary.recovered, summary.pending, summary.conflicts.len());
+            let notice = format!(
+                "Recovery finished: {} recovered, {} pending, {} conflicts.",
+                summary.recovered,
+                summary.pending,
+                summary.conflicts.len()
+            );
             (notice, Payload::Recovered(summary))
         }
         Action::Cancel(id) => {
             profile.cancel(&id)?;
-            ("Future local exports cancelled. Copies already on a carrier remain valid.".to_owned(), Payload::None)
+            (
+                "Future local exports cancelled. Copies already on a carrier remain valid."
+                    .to_owned(),
+                Payload::None,
+            )
         }
     };
     Ok(Completed {
         notice,
-        snapshot: if refresh { Some(Snapshot::load(&profile)?) } else { None },
+        snapshot: if refresh {
+            Some(Snapshot::load(&profile)?)
+        } else {
+            None
+        },
         payload,
     })
 }
@@ -168,14 +236,21 @@ fn directory_file_bytes(root: &Path) -> Result<u64> {
         for entry in std::fs::read_dir(directory)? {
             let entry = entry?;
             entries += 1;
-            if entries > 256 { bail!("Sealed parcel has too many entries to measure"); }
+            if entries > 256 {
+                bail!("Sealed parcel has too many entries to measure");
+            }
             let metadata = std::fs::symlink_metadata(entry.path())?;
             if metadata.is_dir() && depth < 4 {
                 directories.push((entry.path(), depth + 1));
             } else if metadata.is_file() {
-                total = total.checked_add(metadata.len()).context("Parcel file sizes overflow")?;
+                total = total
+                    .checked_add(metadata.len())
+                    .context("Parcel file sizes overflow")?;
             } else {
-                bail!("Unexpected entry in sealed parcel: {}", entry.path().display());
+                bail!(
+                    "Unexpected entry in sealed parcel: {}",
+                    entry.path().display()
+                );
             }
         }
     }

@@ -11,7 +11,10 @@ use relay_core::Profile;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(version, about = "RelayPost — carry files offline, verify their arrival")]
+#[command(
+    version,
+    about = "RelayPost — carry files offline, verify their arrival"
+)]
 struct Options {
     /// Isolated profile directory; shared with the CLI by default
     #[arg(long, value_name = "DIRECTORY")]

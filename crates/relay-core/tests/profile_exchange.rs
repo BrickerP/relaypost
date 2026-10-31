@@ -513,5 +513,12 @@ fn unsafe_inputs_are_rejected_before_an_outgoing_delivery_exists() {
         inputs.push(pair.input(&format!("limit-{index}.txt"), b""));
     }
     assert!(pair.alice.seal(&inputs, &pair.bob_card.fingerprint, PASSWORD).is_err());
+    let oversized = pair.root.join("input/oversized.bin");
+    fs::File::create(&oversized).unwrap().set_len((64 * MIB + 1) as u64).unwrap();
+    assert!(pair.alice.seal(&[oversized], &pair.bob_card.fingerprint, PASSWORD).is_err());
+    let same_name = pair.root.join("another/source.txt");
+    fs::create_dir_all(same_name.parent().unwrap()).unwrap();
+    fs::write(&same_name, b"different bytes, colliding archive name").unwrap();
+    assert!(pair.alice.seal(&[source, same_name], &pair.bob_card.fingerprint, PASSWORD).is_err());
     assert!(pair.alice.deliveries().unwrap().is_empty());
 }

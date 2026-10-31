@@ -18,7 +18,7 @@ pub(crate) fn validate_path(path: &str) -> Result<String> {
     ensure!(components.len() <= 16, "path exceeds depth limit");
     for component in components {
         ensure!(!component.is_empty() && component != "." && component != "..", "unsafe path component");
-        ensure!(!component.starts_with('.') && !component.ends_with('.') && !component.ends_with(' '), "hidden or platform-ambiguous path component");
+        ensure!(component != ".relaypost" && !component.ends_with('.') && !component.ends_with(' '), "reserved or platform-ambiguous path component");
         ensure!(!component.chars().any(|c| c.is_control() || matches!(c, ':' | '<' | '>' | '"' | '|' | '?' | '*')), "unsafe path characters");
         let folded = component.nfkc().flat_map(char::to_lowercase).collect::<String>();
         let base = folded.split('.').next().unwrap_or("");
@@ -164,6 +164,7 @@ fn read_header(reader: &mut File, expected: &str, maximum: u64) -> Result<u64> {
     let sum: u32 = block.iter().enumerate().map(|(i, b)| if (148..156).contains(&i) { 32 } else { *b as u32 }).sum();
     ensure!(h.cksum()? == sum, "archive header checksum mismatch");
     ensure!(h.entry_type() == tar::EntryType::Regular && h.path_bytes().as_ref() == expected.as_bytes(), "unexpected, unsafe or special archive entry");
+    ensure!(&block[..expected.len()] == expected.as_bytes() && block[expected.len()..100].iter().all(|b| *b == 0), "noncanonical archive entry name");
     ensure!(&block[257..263] == b"ustar\0" && &block[263..265] == b"00", "archive must use USTAR v1 subset");
     ensure!(block[157..257].iter().all(|b| *b == 0) && block[345..500].iter().all(|b| *b == 0), "archive links and path prefixes are forbidden");
     let size = h.size()?;

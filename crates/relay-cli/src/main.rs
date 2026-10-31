@@ -9,7 +9,11 @@ use std::path::PathBuf;
 use zeroize::Zeroizing;
 
 #[derive(Parser)]
-#[command(name = "relaypost", version, about = "Carry files offline. Verify their arrival.")]
+#[command(
+    name = "relaypost",
+    version,
+    about = "Carry files offline. Verify their arrival."
+)]
 struct Cli {
     /// Isolated profile directory (defaults to the OS application data directory)
     #[arg(long, global = true, value_name = "DIRECTORY")]
@@ -88,9 +92,13 @@ enum IdentityCommand {
 #[derive(Subcommand)]
 enum ContactsCommand {
     /// Verify a self-signed public card, then store it as unverified
-    Import { card: PathBuf },
+    Import {
+        card: PathBuf,
+    },
     /// Pin the complete fingerprint after comparing it through a trusted channel
-    Trust { fingerprint: String },
+    Trust {
+        fingerprint: String,
+    },
     List,
 }
 
@@ -138,24 +146,45 @@ fn run(cli: &Cli) -> Result<()> {
             }
             IdentityCommand::Export { output } => {
                 let card = profile.export_card(output)?;
-                emit(cli.json, &card, format!("Public card: {}\n{}", output.display(), card_text(&card)))?;
+                emit(
+                    cli.json,
+                    &card,
+                    format!("Public card: {}\n{}", output.display(), card_text(&card)),
+                )?;
             }
         },
         Command::Contacts { command } => match command {
             ContactsCommand::Import { card } => {
                 let contact = profile.import_contact(card)?;
-                emit(cli.json, &contact, format!("{}\nCompare the complete fingerprint before trusting.", contact_text(&contact)))?;
+                emit(
+                    cli.json,
+                    &contact,
+                    format!(
+                        "{}\nCompare the complete fingerprint before trusting.",
+                        contact_text(&contact)
+                    ),
+                )?;
             }
             ContactsCommand::Trust { fingerprint } => {
                 profile.trust_contact(fingerprint)?;
-                let contact = profile.contacts()?.into_iter().find(|contact| contact.card.fingerprint == *fingerprint)
+                let contact = profile
+                    .contacts()?
+                    .into_iter()
+                    .find(|contact| contact.card.fingerprint == *fingerprint)
                     .context("Contact missing after trust update")?;
                 emit(cli.json, &contact, contact_text(&contact))?;
             }
             ContactsCommand::List => {
                 let contacts = profile.contacts()?;
-                let text = if contacts.is_empty() { "No contacts. Import a public card first.".to_owned() }
-                    else { contacts.iter().map(contact_text).collect::<Vec<_>>().join("\n\n") };
+                let text = if contacts.is_empty() {
+                    "No contacts. Import a public card first.".to_owned()
+                } else {
+                    contacts
+                        .iter()
+                        .map(contact_text)
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                };
                 emit(cli.json, &contacts, text)?;
             }
         },
@@ -166,7 +195,14 @@ fn run(cli: &Cli) -> Result<()> {
         }
         Command::Export { parcel_id, carrier } => {
             let path = profile.export_parcel(parcel_id, carrier)?;
-            emit(cli.json, &path, format!("Exported: {}\nAwaiting a verified signed receipt.", path.display()))?;
+            emit(
+                cli.json,
+                &path,
+                format!(
+                    "Exported: {}\nAwaiting a verified signed receipt.",
+                    path.display()
+                ),
+            )?;
         }
         Command::Inspect { parcel } => {
             let inspection = profile.inspect_parcel(parcel)?;
@@ -175,13 +211,25 @@ fn run(cli: &Cli) -> Result<()> {
         Command::Receive { parcel } => {
             let password = password(cli, false)?;
             let result = profile.receive_parcel(parcel, &password)?;
-            let text = format!("{}\nRepaired shards: {}\nAlready saved: {}", record_text(&result.record), result.repaired_shards, result.duplicate);
+            let text = format!(
+                "{}\nRepaired shards: {}\nAlready saved: {}",
+                record_text(&result.record),
+                result.repaired_shards,
+                result.duplicate
+            );
             emit(cli.json, &result, text)?;
         }
         Command::Receipt { command } => match command {
             ReceiptCommand::Export { parcel_id, carrier } => {
                 let path = profile.export_receipt(parcel_id, carrier)?;
-                emit(cli.json, &path, format!("Signed receipt exported: {}\nCarry it back to the sender.", path.display()))?;
+                emit(
+                    cli.json,
+                    &path,
+                    format!(
+                        "Signed receipt exported: {}\nCarry it back to the sender.",
+                        path.display()
+                    ),
+                )?;
             }
             ReceiptCommand::Import { receipt } => {
                 let record = profile.import_receipt(receipt)?;
@@ -190,22 +238,44 @@ fn run(cli: &Cli) -> Result<()> {
         },
         Command::Deliveries => {
             let records = profile.deliveries()?;
-            let text = if records.is_empty() { "No deliveries yet.".to_owned() }
-                else { records.iter().map(record_text).collect::<Vec<_>>().join("\n\n") };
+            let text = if records.is_empty() {
+                "No deliveries yet.".to_owned()
+            } else {
+                records
+                    .iter()
+                    .map(record_text)
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            };
             emit(cli.json, &records, text)?;
         }
         Command::Recover => {
             let password = password(cli, false)?;
             let summary = profile.recover(&password)?;
-            let mut text = format!("Recovered: {}\nPending: {}", summary.recovered, summary.pending);
-            for conflict in &summary.conflicts { text.push_str(&format!("\nConflict: {conflict}")); }
+            let mut text = format!(
+                "Recovered: {}\nPending: {}",
+                summary.recovered, summary.pending
+            );
+            for conflict in &summary.conflicts {
+                text.push_str(&format!("\nConflict: {conflict}"));
+            }
             emit(cli.json, &summary, text)?;
         }
         Command::Cancel { parcel_id } => {
             profile.cancel(parcel_id)?;
-            let record = profile.deliveries()?.into_iter().find(|record| record.parcel_id == *parcel_id)
+            let record = profile
+                .deliveries()?
+                .into_iter()
+                .find(|record| record.parcel_id == *parcel_id)
                 .context("Delivery missing after cancellation")?;
-            emit(cli.json, &record, format!("{}\nAlready exported copies cannot be recalled.", record_text(&record)))?;
+            emit(
+                cli.json,
+                &record,
+                format!(
+                    "{}\nAlready exported copies cannot be recalled.",
+                    record_text(&record)
+                ),
+            )?;
         }
     }
     Ok(())
@@ -217,27 +287,45 @@ fn password(cli: &Cli, confirm: bool) -> Result<Zeroizing<String>> {
     } else if let Some(path) = &cli.password_file {
         read_password(File::open(path).context("Cannot open password file")?)?
     } else {
-        let password = Zeroizing::new(rpassword::prompt_password("Identity password: ")
-            .context("Cannot read a masked password. Use --password-stdin or --password-file.")?);
+        let password =
+            Zeroizing::new(rpassword::prompt_password("Identity password: ").context(
+                "Cannot read a masked password. Use --password-stdin or --password-file.",
+            )?);
         if confirm {
             let confirmation = Zeroizing::new(rpassword::prompt_password("Confirm password: ")?);
-            if *password != *confirmation { bail!("Passwords do not match"); }
+            if *password != *confirmation {
+                bail!("Passwords do not match");
+            }
         }
         password
     };
     if password.ends_with('\n') {
         password.pop();
-        if password.ends_with('\r') { password.pop(); }
+        if password.ends_with('\r') {
+            password.pop();
+        }
     }
-    if password.is_empty() { bail!("Password must not be empty"); }
-    if password.chars().any(|character| matches!(character, '\n' | '\r' | '\0')) { bail!("Password must be a single line without NUL bytes"); }
+    if password.is_empty() {
+        bail!("Password must not be empty");
+    }
+    if password
+        .chars()
+        .any(|character| matches!(character, '\n' | '\r' | '\0'))
+    {
+        bail!("Password must be a single line without NUL bytes");
+    }
     Ok(password)
 }
 
 fn read_password(reader: impl Read) -> Result<Zeroizing<String>> {
     let mut password = Zeroizing::new(String::new());
-    reader.take(65_537).read_to_string(&mut password).context("Cannot read a UTF-8 password")?;
-    if password.len() > 65_536 { bail!("Password input exceeds 64 KiB"); }
+    reader
+        .take(65_537)
+        .read_to_string(&mut password)
+        .context("Cannot read a UTF-8 password")?;
+    if password.len() > 65_536 {
+        bail!("Password input exceeds 64 KiB");
+    }
     Ok(password)
 }
 
@@ -254,24 +342,63 @@ fn emit(json: bool, value: &impl Serialize, text: String) -> Result<()> {
 }
 
 fn card_text(card: &PeerCard) -> String {
-    format!("{}\nFingerprint: {}\nPublic age recipient: {}", card.name, card.fingerprint, card.age_recipient)
+    format!(
+        "{}\nFingerprint: {}\nPublic age recipient: {}",
+        card.name, card.fingerprint, card.age_recipient
+    )
 }
 
 fn contact_text(contact: &Contact) -> String {
-    format!("{}\nTrust: {}", card_text(&contact.card), if contact.verified { "pinned" } else { "unverified" })
+    format!(
+        "{}\nTrust: {}",
+        card_text(&contact.card),
+        if contact.verified {
+            "pinned"
+        } else {
+            "unverified"
+        }
+    )
 }
 
 fn record_text(record: &ParcelRecord) -> String {
-    let mut text = format!("Parcel: {}\nDirection: {:?}\nState: {:?}\nFrom: {}\nTo: {}\nFiles: {} ({} bytes)", record.parcel_id, record.direction, record.state, record.sender, record.recipient, record.files, record.total_bytes);
-    if let Some(path) = &record.received_path { text.push_str(&format!("\nSaved batch: {}", path.display())); }
-    if let Some(path) = &record.receipt_path { text.push_str(&format!("\nSigned receipt: {}", path.display())); }
+    let mut text = format!(
+        "Parcel: {}\nDirection: {:?}\nState: {:?}\nFrom: {}\nTo: {}\nFiles: {} ({} bytes)",
+        record.parcel_id,
+        record.direction,
+        record.state,
+        record.sender,
+        record.recipient,
+        record.files,
+        record.total_bytes
+    );
+    if let Some(path) = &record.received_path {
+        text.push_str(&format!("\nSaved batch: {}", path.display()));
+    }
+    if let Some(path) = &record.receipt_path {
+        text.push_str(&format!("\nSigned receipt: {}", path.display()));
+    }
     text
 }
 
 fn inspection_text(inspection: &Inspection) -> String {
-    let mut text = format!("Parcel: {}\nFrom: {}\nTo: {}\nCiphertext: {} bytes\nRecoverable: {}", inspection.parcel_id, inspection.sender, inspection.recipient, inspection.ciphertext_bytes, inspection.recoverable);
+    let mut text = format!(
+        "Parcel: {}\nFrom: {}\nTo: {}\nCiphertext: {} bytes\nRecoverable: {}",
+        inspection.parcel_id,
+        inspection.sender,
+        inspection.recipient,
+        inspection.ciphertext_bytes,
+        inspection.recoverable
+    );
     for group in &inspection.groups {
-        text.push_str(&format!("\nGroup {}: {} data + {} parity; {} valid; missing/bad {:?}; recoverable {}", group.index, group.data_shards, group.parity_shards, group.valid_shards, group.missing_shards, group.recoverable));
+        text.push_str(&format!(
+            "\nGroup {}: {} data + {} parity; {} valid; missing/bad {:?}; recoverable {}",
+            group.index,
+            group.data_shards,
+            group.parity_shards,
+            group.valid_shards,
+            group.missing_shards,
+            group.recoverable
+        ));
     }
     text
 }

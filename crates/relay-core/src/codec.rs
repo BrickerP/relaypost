@@ -4,6 +4,7 @@ use anyhow::{ensure, Context, Result};
 use reed_solomon_erasure::galois_8::ReedSolomon;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
+use std::fs;
 use std::path::Path;
 
 fn encode_group(bytes: &[u8], index: usize) -> Result<(Group, Vec<Vec<u8>>)> {
@@ -60,8 +61,25 @@ fn load_group(parcel: &Path, group: &Group) -> Result<Vec<Option<Vec<u8>>>> {
     let mut shards = Vec::with_capacity(group.shards.len());
     for shard in &group.shards {
         let path = parcel.join(&shard.path);
-        // Missing or malformed bytes are erasures. A link/special file is never
-        // followed; its invalid content has no authority over reconstruction.
+        // Missing or hash-bad bytes are erasures. Links and special files are
+        // format violations rather than erasures: never follow a carrier path
+        // outside its authenticated root, even if parity could repair it.
+        let mut current = parcel.to_path_buf();
+        for component in Path::new(&shard.path).components() {
+            current.push(component);
+            match fs::symlink_metadata(&current) {
+                Ok(meta) => {
+                    ensure!(!meta.file_type().is_symlink(), "symbolic link in parcel shard path");
+                    if current == path {
+                        ensure!(meta.is_file(), "special file in parcel shard path");
+                    } else {
+                        ensure!(meta.is_dir(), "non-directory in parcel shard path");
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
         let bytes = match fsutil::read_bounded(&path, group.shard_bytes as u64) {
             Ok(bytes) if bytes.len() == group.shard_bytes && fsutil::digest(&bytes) == shard.sha256 => Some(bytes),
             _ => None,
@@ -143,7 +161,6 @@ pub(crate) fn copy_exact(parcel: &Path, output: &Path, groups: &[Group]) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use proptest::prelude::*;
 
     fn repaired_bytes(group: &Group, shards: &mut [Option<Vec<u8>>]) -> Result<Vec<u8>> {
