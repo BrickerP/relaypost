@@ -95,4 +95,5 @@ still require field testing.
 - [Implementation contract](docs/IMPLEMENTATION_CONTRACT.md)
 - [Demo and verification limits](docs/DEMO.md)
 - [Kiro development evidence](docs/KIRO_USAGE.md)
+- [Review closure (Chinese)](docs/REVIEW_CLOSURE.zh-CN.md)
 

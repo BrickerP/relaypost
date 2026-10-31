@@ -777,7 +777,10 @@ fn durable_acknowledgments_rebuild_stale_or_missing_indexes_without_healthy_sour
     let confirmed = pair.alice.import_receipt(&receipt).unwrap();
     assert_eq!(confirmed.state, DeliveryState::Confirmed);
     assert_eq!(files(&receipt).len(), 2, "transport receipts stay minimal");
-    let acknowledgment = pair.root.join("alice/acknowledgments").join(&record.parcel_id);
+    let acknowledgment = pair
+        .root
+        .join("alice/acknowledgments")
+        .join(&record.parcel_id);
     assert_eq!(files(&acknowledgment).len(), 4);
     for missing_index in [false, true] {
         for missing_outbox in [false, true] {
@@ -859,7 +862,9 @@ fn damaged_acknowledgment_evidence_cannot_confirm_a_missing_outbox() {
         "envelope.minisig",
     ] {
         for missing_index in [false, true] {
-            let home = pair.root.join(format!("invalid-ack-{name}-{missing_index}"));
+            let home = pair
+                .root
+                .join(format!("invalid-ack-{name}-{missing_index}"));
             copy_tree(&pair.root.join("alice"), &home);
             let database = rusqlite::Connection::open(home.join("state.sqlite3")).unwrap();
             if missing_index {
@@ -1016,7 +1021,11 @@ fn recovery_cleans_actual_postpublication_residue_only_while_the_final_batch_ver
             .join(format!("batch-{}-fixture", outgoing.parcel_id));
         fs::create_dir(&stage).unwrap();
         fs::write(stage.join("archive.tar"), b"SYNTHETIC remaining plaintext").unwrap();
-        fs::write(stage.join("ciphertext.age"), b"SYNTHETIC remaining ciphertext").unwrap();
+        fs::write(
+            stage.join("ciphertext.age"),
+            b"SYNTHETIC remaining ciphertext",
+        )
+        .unwrap();
         assert!(!stage.join("batch").exists());
         let staged_digest = tree_digest(&stage);
         if changed_final {

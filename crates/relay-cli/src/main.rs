@@ -279,7 +279,9 @@ fn run(cli: &Cli) -> Result<()> {
             let record = profile
                 .deliveries()?
                 .into_iter()
-                .find(|record| record.parcel_id == *parcel_id && record.direction == Direction::Outgoing)
+                .find(|record| {
+                    record.parcel_id == *parcel_id && record.direction == Direction::Outgoing
+                })
                 .context("Delivery missing after cancellation")?;
             emit(
                 cli.json,

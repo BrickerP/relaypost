@@ -161,13 +161,15 @@ impl RelayApp {
                     Payload::Measured(bytes) => self.selected_bytes = Some(bytes),
                     Payload::Sealed(details) => {
                         self.sealed_id = Some(details.record.parcel_id.clone());
-                        self.selected_delivery = Some((details.record.parcel_id.clone(), Direction::Outgoing));
+                        self.selected_delivery =
+                            Some((details.record.parcel_id.clone(), Direction::Outgoing));
                         self.sealed_inspection = Some(details.inspection);
                         self.sealed_file_bytes = Some(details.file_bytes);
                     }
                     Payload::Inspected(inspection) => self.inspection = Some(inspection),
                     Payload::Received(result) => {
-                        self.selected_delivery = Some((result.record.parcel_id.clone(), Direction::Incoming));
+                        self.selected_delivery =
+                            Some((result.record.parcel_id.clone(), Direction::Incoming));
                         self.received = Some(*result);
                     }
                     Payload::Recovered(summary) => self.recovery = Some(summary),
@@ -340,7 +342,13 @@ impl RelayApp {
             let trusted: Vec<_> = self
                 .contacts
                 .iter()
-                .filter(|contact| contact.verified && self.identity.as_ref().is_none_or(|own| own.fingerprint != contact.card.fingerprint))
+                .filter(|contact| {
+                    contact.verified
+                        && self
+                            .identity
+                            .as_ref()
+                            .is_none_or(|own| own.fingerprint != contact.card.fingerprint)
+                })
                 .cloned()
                 .collect();
             if trusted.is_empty() {
@@ -461,9 +469,9 @@ impl RelayApp {
                 .sealed_id
                 .as_ref()
                 .and_then(|id| {
-                    self.deliveries
-                        .iter()
-                        .find(|record| record.parcel_id == *id && record.direction == Direction::Outgoing)
+                    self.deliveries.iter().find(|record| {
+                        record.parcel_id == *id && record.direction == Direction::Outgoing
+                    })
                 })
                 .cloned();
             if let Some(record) = sealed {
@@ -723,16 +731,26 @@ impl RelayApp {
                                 );
                                 if ui
                                     .selectable_label(
-                                        self.selected_delivery.as_ref().is_some_and(|(id, direction)| id == &record.parcel_id && direction == &record.direction),
+                                        self.selected_delivery.as_ref().is_some_and(
+                                            |(id, direction)| {
+                                                id == &record.parcel_id
+                                                    && direction == &record.direction
+                                            },
+                                        ),
                                         label,
                                     )
                                     .clicked()
                                 {
-                                    self.selected_delivery = Some((record.parcel_id.clone(), record.direction.clone()));
+                                    self.selected_delivery =
+                                        Some((record.parcel_id.clone(), record.direction.clone()));
                                 }
                                 state_badge(ui, &record.state);
                                 if record.local_error.is_some() {
-                                    ui.label(RichText::new("LOCAL COPY NEEDS ATTENTION").small().color(RED));
+                                    ui.label(
+                                        RichText::new("LOCAL COPY NEEDS ATTENTION")
+                                            .small()
+                                            .color(RED),
+                                    );
                                 }
                             });
                             ui.separator();

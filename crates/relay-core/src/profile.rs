@@ -804,11 +804,9 @@ impl Profile {
                             return Ok(());
                         }
                         let destination = self.home.join("inbox").join(id);
-                        let published = self
-                            .verify_committed(&destination, connection)
-                            .context(
-                                "receive residue has no valid published batch; retaining staging",
-                            )?;
+                        let published = self.verify_committed(&destination, connection).context(
+                            "receive residue has no valid published batch; retaining staging",
+                        )?;
                         ensure!(
                             published.envelope.parcel_id == id,
                             "published directory ID mismatch; retaining staging"
@@ -848,6 +846,8 @@ impl Profile {
                         );
                         // verify_committed validates both manifests against the
                         // same signed digest and every published content byte.
+                        fsutil::sync_tree(&destination)?;
+                        fsutil::sync_dir(&self.home.join("inbox"))?;
                         self.remove_receive_stage(&stage)?;
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -903,7 +903,10 @@ impl Profile {
             for entry in fs::read_dir(&directory)? {
                 let entry = entry?;
                 entries += 1;
-                ensure!(entries <= 4096, "receive staging exceeds cleanup entry bound");
+                ensure!(
+                    entries <= 4096,
+                    "receive staging exceeds cleanup entry bound"
+                );
                 let metadata = fs::symlink_metadata(entry.path())?;
                 ensure!(
                     !metadata.file_type().is_symlink(),
