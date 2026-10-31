@@ -1,7 +1,7 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use relay_core::{Contact, Inspection, ParcelRecord, PeerCard, Profile};
+use relay_core::{Contact, Direction, Inspection, ParcelRecord, PeerCard, Profile};
 use serde::Serialize;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -70,7 +70,11 @@ enum Command {
     /// List local delivery facts and signed confirmation states
     Deliveries,
     /// Verify published batches and recover their index or missing receipts
-    Recover,
+    Recover {
+        /// Discard interrupted receive staging instead of resuming it (no password required)
+        #[arg(long)]
+        discard_incomplete: bool,
+    },
     /// Stop future local exports; already exported copies remain valid
     Cancel { parcel_id: String },
 }
@@ -249,24 +253,33 @@ fn run(cli: &Cli) -> Result<()> {
             };
             emit(cli.json, &records, text)?;
         }
-        Command::Recover => {
-            let password = password(cli, false)?;
-            let summary = profile.recover(&password)?;
-            let mut text = format!(
-                "Recovered: {}\nPending: {}",
-                summary.recovered, summary.pending
-            );
-            for conflict in &summary.conflicts {
-                text.push_str(&format!("\nConflict: {conflict}"));
+        Command::Recover { discard_incomplete } => {
+            if *discard_incomplete {
+                let count = profile.discard_incomplete_receives()?;
+                emit(
+                    cli.json,
+                    &serde_json::json!({ "discarded_staging": count }),
+                    format!("Discarded {count} interrupted receive staging directories."),
+                )?;
+            } else {
+                let password = password(cli, false)?;
+                let summary = profile.recover(&password)?;
+                let mut text = format!(
+                    "Recovered: {}\nPending: {}",
+                    summary.recovered, summary.pending
+                );
+                for conflict in &summary.conflicts {
+                    text.push_str(&format!("\nConflict: {conflict}"));
+                }
+                emit(cli.json, &summary, text)?;
             }
-            emit(cli.json, &summary, text)?;
         }
         Command::Cancel { parcel_id } => {
             profile.cancel(parcel_id)?;
             let record = profile
                 .deliveries()?
                 .into_iter()
-                .find(|record| record.parcel_id == *parcel_id)
+                .find(|record| record.parcel_id == *parcel_id && record.direction == Direction::Outgoing)
                 .context("Delivery missing after cancellation")?;
             emit(
                 cli.json,
@@ -376,6 +389,9 @@ fn record_text(record: &ParcelRecord) -> String {
     }
     if let Some(path) = &record.receipt_path {
         text.push_str(&format!("\nSigned receipt: {}", path.display()));
+    }
+    if let Some(error) = &record.local_error {
+        text.push_str(&format!("\nLocal copy needs attention: {error}"));
     }
     text
 }

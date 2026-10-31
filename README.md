@@ -45,7 +45,20 @@ directory. Run the bundled `relaypost --help` for commands. Use a masked prompt,
 **History** shows local delivery records, recovery results and cancellation.
 Re-importing the same parcel verifies and reuses its committed batch. Recovery
 rebuilds a missing index or receipt from verified published files; changed files
-produce a conflict. Cancellation stops future local exports and cannot recall
+produce a conflict. A damaged local outbox copy has its own health warning;
+`WaitingReceipt`, `Confirmed`, and cancellation remain delivery facts. Verified
+returned acknowledgments retain their original signed envelope, allowing their
+confirmation to be recovered even when the local outbox copy is gone.
+
+Recovery also resumes fully verified receive stages and removes superseded
+temporary copies after checking the published batch. Partial or conflicting
+stages remain pending. **Discard interrupted receive work** in History offers an
+explicit confirmation, or use `relaypost recover --discard-incomplete` to discard
+only managed receive staging. This command requires no password. Import the
+parcel again from its carrier when you want to retry it.
+
+Contacts must identify another device; importing or sending to this identity's
+own card is refused. Cancellation stops future local exports and cannot recall
 copies already carried elsewhere. Original input files are never removed.
 
 ## Architecture

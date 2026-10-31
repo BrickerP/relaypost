@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::{bail, ensure, Context, Result};
 use rusqlite::Connection;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +23,7 @@ pub struct Profile {
     home: PathBuf,
 }
 
+#[derive(Clone)]
 struct AuthenticatedEnvelope {
     envelope: Envelope,
     raw: Vec<u8>,
@@ -89,11 +90,19 @@ impl Profile {
         let _guard = fsutil::lock(&self.home)?;
         let path = fsutil::selected_file(path)?;
         let card: PeerCard = fsutil::json(&fsutil::read_bounded(&path, MAX_ENVELOPE)?)?;
+        ensure!(
+            card.fingerprint != self.card()?.fingerprint,
+            "this is your own identity card; import a different recipient's card"
+        );
         store::import_contact(&store::open(&self.home)?, &card)
     }
 
     pub fn trust_contact(&self, fingerprint: &str) -> Result<()> {
         let _guard = fsutil::lock(&self.home)?;
+        ensure!(
+            fingerprint != self.card()?.fingerprint,
+            "your own identity cannot be trusted as a recipient; select another contact"
+        );
         store::trust(&store::open(&self.home)?, fingerprint)
     }
 
@@ -111,6 +120,10 @@ impl Profile {
         let _guard = fsutil::lock(&self.home)?;
         let connection = store::open(&self.home)?;
         let sender = self.card()?;
+        ensure!(
+            recipient != sender.fingerprint,
+            "sending to your own identity is not supported; select another recipient"
+        );
         let recipient = store::resolve(&connection, recipient)?;
         let unlocked = identity::unlock(&self.home.join("identity"), password)?;
         ensure!(
@@ -305,7 +318,7 @@ impl Profile {
                 + 8 * crate::format::MIB,
         )?;
         let staging = tempfile::Builder::new()
-            .prefix("batch-")
+            .prefix(&format!("batch-{id}-"))
             .tempdir_in(self.home.join("inbox/.staging"))?;
         let ciphertext = staging.path().join("ciphertext.age");
         let repaired = codec::reconstruct(
@@ -405,21 +418,27 @@ impl Profile {
         let raw = fsutil::read_bounded(&receipt.join("receipt.json"), MAX_ENVELOPE)?;
         let claimed: Receipt = fsutil::json(&raw)?;
         fsutil::check_id(&claimed.parcel_id)?;
-        let mut record = store::get(&connection, &claimed.parcel_id, Direction::Outgoing)?
-            .context("receipt has no matching outgoing delivery")?;
-        let authenticated = self.load_envelope(
-            &self.home.join("outbox").join(&claimed.parcel_id),
-            &connection,
-        )?;
+        let destination = self.home.join("acknowledgments").join(&claimed.parcel_id);
+        let existing = if fs::symlink_metadata(&destination).is_ok() {
+            Some(self.read_acknowledgment(&destination, &connection)?)
+        } else {
+            None
+        };
+        let source = self.home.join("outbox").join(&claimed.parcel_id);
+        let authenticated = if let Some((authenticated, _, _)) = &existing {
+            authenticated.clone()
+        } else {
+            self.load_envelope(&source, &connection)
+                .context("receipt has no authenticated original outgoing envelope")?
+        };
         ensure!(
-            authenticated.envelope.sender.fingerprint == self.card()?.fingerprint,
+            authenticated.envelope.sender.fingerprint == self.card()?.fingerprint
+                && authenticated.envelope.parcel_id == claimed.parcel_id,
             "receipt is not for this sender"
         );
         let (verified_raw, signature) = self.read_receipt(&receipt, &authenticated)?;
         ensure!(verified_raw == raw, "receipt changed while importing");
-        let destination = self.home.join("acknowledgments").join(&claimed.parcel_id);
-        if fs::symlink_metadata(&destination).is_ok() {
-            let (old_raw, old_sig) = self.read_receipt(&destination, &authenticated)?;
+        if let Some((_, old_raw, old_sig)) = existing {
             ensure!(
                 old_raw == verified_raw && old_sig == signature,
                 "conflicting receipt already recorded"
@@ -433,11 +452,29 @@ impl Profile {
                 &staging.path().join("receipt.minisig"),
                 signature.as_bytes(),
             )?;
+            fsutil::write_new(&staging.path().join("envelope.json"), &authenticated.raw)?;
+            fsutil::write_new(
+                &staging.path().join("envelope.minisig"),
+                authenticated.signature.as_bytes(),
+            )?;
+            self.read_acknowledgment(staging.path(), &connection)?;
             fsutil::sync_tree(staging.path())?;
             fsutil::publish_noreplace(staging.path(), &destination)?;
         }
+        let mut record = store::get(&connection, &claimed.parcel_id, Direction::Outgoing)?
+            .unwrap_or_else(|| {
+                self.outgoing_record(
+                    &authenticated.envelope,
+                    source.clone(),
+                    DeliveryState::Ready,
+                )
+            });
         record.state = DeliveryState::Confirmed;
         record.receipt_path = Some(destination);
+        record.local_error = self
+            .verify_outgoing_copy(&source, &authenticated, &connection)
+            .err()
+            .map(|error| format!("{error:#}"));
         record.updated_at = fsutil::now();
         store::save(&connection, &record)?;
         Ok(record)
@@ -457,6 +494,7 @@ impl Profile {
             pending: 0,
             conflicts: Vec::new(),
         };
+        self.recover_staged_receives(&connection, &mut summary)?;
         let inbox = self.home.join("inbox");
         let mut seen = BTreeSet::new();
         for entry in fs::read_dir(&inbox)? {
@@ -511,9 +549,58 @@ impl Profile {
                     .push(format!("{}: published batch is missing", record.parcel_id));
             }
         }
-        for entry in fs::read_dir(self.home.join("inbox/.staging"))? {
-            entry?;
-            summary.pending += 1;
+        let mut acknowledged = BTreeMap::new();
+        let mut outgoing_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut recovered_outgoing = BTreeSet::new();
+        // Acknowledgments carry their exact authenticated original envelope.
+        // Reconcile them before touching retained shards: a durable recipient
+        // commitment does not depend on the sender retaining a healthy copy.
+        for entry in fs::read_dir(self.home.join("acknowledgments"))? {
+            let entry = entry?;
+            let id = entry.file_name().to_string_lossy().into_owned();
+            if !fsutil::valid_digest(&id) {
+                summary.pending += 1;
+                continue;
+            }
+            let result = (|| -> Result<AuthenticatedEnvelope> {
+                let (authenticated, _, _) = self.read_acknowledgment(&entry.path(), &connection)?;
+                ensure!(
+                    authenticated.envelope.parcel_id == id,
+                    "acknowledgment directory ID mismatch"
+                );
+                fsutil::sync_tree(&entry.path())?;
+                fsutil::sync_dir(&self.home.join("acknowledgments"))?;
+                let previous = store::get(&connection, &id, Direction::Outgoing)?;
+                let repaired = previous.as_ref().is_none_or(|record| {
+                    record.state != DeliveryState::Confirmed
+                        || record.receipt_path.as_ref() != Some(&entry.path())
+                });
+                let mut record = previous.unwrap_or_else(|| {
+                    self.outgoing_record(
+                        &authenticated.envelope,
+                        self.home.join("outbox").join(&id),
+                        DeliveryState::Confirmed,
+                    )
+                });
+                record.state = DeliveryState::Confirmed;
+                record.receipt_path = Some(entry.path());
+                if repaired {
+                    record.updated_at = fsutil::now();
+                    recovered_outgoing.insert(id.clone());
+                }
+                store::save(&connection, &record)?;
+                Ok(authenticated)
+            })();
+            match result {
+                Ok(authenticated) => {
+                    acknowledged.insert(id, authenticated);
+                }
+                Err(error) => {
+                    let message = format!("invalid local acknowledgment: {error:#}");
+                    summary.conflicts.push(format!("{id}: {message}"));
+                    outgoing_errors.entry(id).or_default().push(message);
+                }
+            }
         }
         let mut seen_outgoing = BTreeSet::new();
         for entry in fs::read_dir(self.home.join("outbox"))? {
@@ -524,65 +611,90 @@ impl Profile {
                 continue;
             }
             seen_outgoing.insert(id.clone());
-            let result = (|| -> Result<bool> {
+            let result = (|| -> Result<()> {
                 let authenticated = self.load_envelope(&entry.path(), &connection)?;
                 ensure!(
                     authenticated.envelope.parcel_id == id
                         && authenticated.envelope.sender.fingerprint == self.card()?.fingerprint,
                     "outbox identity mismatch"
                 );
-                let health = codec::inspect(&entry.path(), &authenticated.envelope.groups)?;
-                ensure!(
-                    health.iter().all(|g| g.missing_shards.is_empty()),
-                    "local immutable outgoing parcel is damaged"
-                );
                 let previous = store::get(&connection, &id, Direction::Outgoing)?;
                 let was_missing = previous.is_none();
-                let was_failed = previous
-                    .as_ref()
-                    .is_some_and(|record| record.state == DeliveryState::Failed);
-                let mut record = previous.unwrap_or_else(|| {
+                let record = previous.unwrap_or_else(|| {
                     self.outgoing_record(
                         &authenticated.envelope,
                         entry.path(),
                         DeliveryState::Ready,
                     )
                 });
-                if was_failed {
-                    record.state = DeliveryState::Ready;
-                    record.updated_at = fsutil::now();
-                }
-                if self.cancelled(&id)? && record.state != DeliveryState::Confirmed {
-                    record.state = DeliveryState::Cancelled;
-                }
-                let ack = self.home.join("acknowledgments").join(&id);
-                if ack.try_exists()? {
-                    self.read_receipt(&ack, &authenticated)?;
-                    record.state = DeliveryState::Confirmed;
-                    record.receipt_path = Some(ack);
-                }
                 store::save(&connection, &record)?;
-                Ok(was_missing || was_failed)
-            })();
-            match result {
-                Ok(true) => summary.recovered += 1,
-                Ok(false) => {}
-                Err(error) => {
-                    self.mark_outgoing_failed(&connection, &id)?;
-                    summary.conflicts.push(format!("{id}: {error:#}"));
+                if was_missing {
+                    recovered_outgoing.insert(id.clone());
                 }
+                if let Some(confirmed) = acknowledged.get(&id) {
+                    ensure!(
+                        authenticated.raw == confirmed.raw
+                            && authenticated.signature == confirmed.signature,
+                        "retained outgoing envelope conflicts with confirmed original"
+                    );
+                }
+                self.verify_outgoing_shards(&entry.path(), &authenticated)
+            })();
+            if let Err(error) = result {
+                let message = format!("{error:#}");
+                summary.conflicts.push(format!("{id}: {message}"));
+                outgoing_errors.entry(id).or_default().push(message);
             }
         }
-        for record in store::deliveries(&connection)? {
-            if record.direction == Direction::Outgoing && !seen_outgoing.contains(&record.parcel_id)
+        for mut record in store::deliveries(&connection)? {
+            if record.direction != Direction::Outgoing {
+                continue;
+            }
+            if !seen_outgoing.contains(&record.parcel_id) {
+                let message = "local outgoing parcel is missing".to_string();
+                summary
+                    .conflicts
+                    .push(format!("{}: {message}", record.parcel_id));
+                outgoing_errors
+                    .entry(record.parcel_id.clone())
+                    .or_default()
+                    .push(message);
+            }
+            if record.state == DeliveryState::Confirmed
+                && !acknowledged.contains_key(&record.parcel_id)
+                && !outgoing_errors.contains_key(&record.parcel_id)
             {
-                self.mark_outgoing_failed(&connection, &record.parcel_id)?;
-                summary.conflicts.push(format!(
-                    "{}: local outgoing parcel is missing",
-                    record.parcel_id
-                ));
+                let message = "local acknowledgment is missing".to_string();
+                summary
+                    .conflicts
+                    .push(format!("{}: {message}", record.parcel_id));
+                outgoing_errors
+                    .entry(record.parcel_id.clone())
+                    .or_default()
+                    .push(message);
+            }
+            let local_error = outgoing_errors
+                .remove(&record.parcel_id)
+                .map(|errors| errors.join("; "));
+            let phase_repaired = self.cancelled(&record.parcel_id)?
+                && !matches!(
+                    record.state,
+                    DeliveryState::Confirmed | DeliveryState::Cancelled
+                );
+            if phase_repaired {
+                record.state = DeliveryState::Cancelled;
+                recovered_outgoing.insert(record.parcel_id.clone());
+            }
+            if record.local_error != local_error || phase_repaired {
+                if record.local_error.is_some() && local_error.is_none() {
+                    recovered_outgoing.insert(record.parcel_id.clone());
+                }
+                record.local_error = local_error;
+                record.updated_at = fsutil::now();
+                store::save(&connection, &record)?;
             }
         }
+        summary.recovered += recovered_outgoing.len();
         Ok(summary)
     }
 
@@ -604,6 +716,217 @@ impl Profile {
         record.state = DeliveryState::Cancelled;
         record.updated_at = fsutil::now();
         store::save(&connection, &record)
+    }
+
+    /// Explicitly discard managed receive staging directories. Published
+    /// batches, receipts and unrelated entries are never cleanup targets.
+    pub fn discard_incomplete_receives(&self) -> Result<usize> {
+        let _guard = fsutil::lock(&self.home)?;
+        let root = self.home.join("inbox/.staging");
+        fsutil::no_symlink_components(&root)?;
+        fsutil::directory(&root)?;
+        let mut removed = 0;
+        for entry in fs::read_dir(&root)? {
+            let entry = entry?;
+            if !self.managed_receive_stage(&entry.path())? {
+                continue;
+            }
+            self.remove_receive_stage(&entry.path())?;
+            removed += 1;
+        }
+        fsutil::sync_dir(&root)?;
+        Ok(removed)
+    }
+
+    fn managed_receive_stage(&self, path: &Path) -> Result<bool> {
+        let root = self.home.join("inbox/.staging");
+        ensure!(
+            path.parent() == Some(root.as_path()),
+            "receive staging path escaped its root"
+        );
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return Ok(false);
+        };
+        let Some(suffix) = name.strip_prefix("batch-") else {
+            return Ok(false);
+        };
+        if suffix.is_empty()
+            || !suffix
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        {
+            return Ok(false);
+        }
+        let metadata = fs::symlink_metadata(path)?;
+        Ok(metadata.is_dir() && !metadata.file_type().is_symlink())
+    }
+
+    fn recover_staged_receives(
+        &self,
+        connection: &Connection,
+        summary: &mut RecoverySummary,
+    ) -> Result<()> {
+        let root = self.home.join("inbox/.staging");
+        fsutil::no_symlink_components(&root)?;
+        fsutil::directory(&root)?;
+        for entry in fs::read_dir(&root)? {
+            let entry = entry?;
+            if !self.managed_receive_stage(&entry.path())? {
+                continue;
+            }
+            let stage = entry.path();
+            let result = (|| -> Result<()> {
+                for item in fs::read_dir(&stage)? {
+                    let item = item?;
+                    let name = item.file_name();
+                    let name = name.to_str().context("non-UTF8 receive staging entry")?;
+                    let metadata = fs::symlink_metadata(item.path())?;
+                    ensure!(
+                        !metadata.file_type().is_symlink()
+                            && ((name == "batch" && metadata.is_dir())
+                                || (matches!(name, "ciphertext.age" | "archive.tar")
+                                    && metadata.is_file())),
+                        "unexpected receive staging entry: {name}"
+                    );
+                }
+                let batch = stage.join("batch");
+                match fs::symlink_metadata(&batch) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        let name = entry.file_name();
+                        let Some((id, suffix)) = name
+                            .to_str()
+                            .and_then(|name| name.strip_prefix("batch-"))
+                            .and_then(|name| name.split_once('-'))
+                        else {
+                            return Ok(());
+                        };
+                        if !fsutil::valid_digest(id) || suffix.is_empty() {
+                            return Ok(());
+                        }
+                        let destination = self.home.join("inbox").join(id);
+                        let published = self
+                            .verify_committed(&destination, connection)
+                            .context(
+                                "receive residue has no valid published batch; retaining staging",
+                            )?;
+                        ensure!(
+                            published.envelope.parcel_id == id,
+                            "published directory ID mismatch; retaining staging"
+                        );
+                        fsutil::sync_tree(&destination)?;
+                        fsutil::sync_dir(&self.home.join("inbox"))?;
+                        self.remove_receive_stage(&stage)?;
+                        return Ok(());
+                    }
+                    Err(error) => return Err(error.into()),
+                    Ok(_) => {}
+                }
+                let metadata = batch.join(".relaypost");
+                match fs::symlink_metadata(&metadata) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) => return Err(error.into()),
+                    Ok(_) => fsutil::directory(&metadata)?,
+                }
+                fsutil::no_symlink_components(&metadata)?;
+                match fs::symlink_metadata(metadata.join("prepared.json")) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) => return Err(error.into()),
+                    Ok(_) => {}
+                }
+                let authenticated = self.verify_committed(&batch, connection)?;
+                let destination = self
+                    .home
+                    .join("inbox")
+                    .join(&authenticated.envelope.parcel_id);
+                match fs::symlink_metadata(&destination) {
+                    Ok(_) => {
+                        let published = self.verify_committed(&destination, connection)?;
+                        ensure!(
+                            published.raw == authenticated.raw
+                                && published.signature == authenticated.signature,
+                            "prepared receive conflicts with the published batch; retaining staging"
+                        );
+                        // verify_committed validates both manifests against the
+                        // same signed digest and every published content byte.
+                        self.remove_receive_stage(&stage)?;
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        ensure!(
+                            store::get(
+                                connection,
+                                &authenticated.envelope.parcel_id,
+                                Direction::Incoming,
+                            )?
+                            .is_none(),
+                            "indexed received batch was removed; retaining prepared staging"
+                        );
+                        fsutil::sync_tree(&batch)?;
+                        fsutil::sync_dir(&stage)?;
+                        fsutil::publish_noreplace(&batch, &destination)?;
+                        self.remove_receive_stage(&stage)?;
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                summary.conflicts.push(format!(
+                    "{}: {error:#}",
+                    entry.file_name().to_string_lossy()
+                ));
+            }
+        }
+        for entry in fs::read_dir(&root)? {
+            entry?;
+            summary.pending += 1;
+        }
+        Ok(())
+    }
+
+    fn remove_receive_stage(&self, path: &Path) -> Result<()> {
+        ensure!(
+            self.managed_receive_stage(path)?,
+            "not a managed receive staging directory"
+        );
+        fsutil::no_symlink_components(path)?;
+        // Validate a bounded complete deletion plan before removing any entry.
+        // The normal maximum is 100 files with at most 16 path components.
+        let mut pending = vec![(path.to_path_buf(), 0usize)];
+        let mut directories = Vec::new();
+        let mut files = Vec::new();
+        let mut entries = 0usize;
+        while let Some((directory, depth)) = pending.pop() {
+            ensure!(depth <= 20, "receive staging exceeds cleanup depth bound");
+            fsutil::no_symlink_components(&directory)?;
+            fsutil::directory(&directory)?;
+            directories.push(directory.clone());
+            for entry in fs::read_dir(&directory)? {
+                let entry = entry?;
+                entries += 1;
+                ensure!(entries <= 4096, "receive staging exceeds cleanup entry bound");
+                let metadata = fs::symlink_metadata(entry.path())?;
+                ensure!(
+                    !metadata.file_type().is_symlink(),
+                    "receive staging cleanup refuses symbolic links"
+                );
+                if metadata.is_dir() {
+                    pending.push((entry.path(), depth + 1));
+                } else {
+                    ensure!(
+                        metadata.is_file(),
+                        "receive staging cleanup refuses special files"
+                    );
+                    files.push(entry.path());
+                }
+            }
+        }
+        for file in files {
+            fs::remove_file(file)?;
+        }
+        for directory in directories.into_iter().rev() {
+            fs::remove_dir(directory)?;
+        }
+        fsutil::sync_dir(&self.home.join("inbox/.staging"))
     }
 
     fn export_directory(&self, path: &Path) -> Result<PathBuf> {
@@ -679,6 +1002,10 @@ impl Profile {
         envelope.validate()?;
         identity::verify_card(&envelope.sender)?;
         identity::verify_card(&envelope.recipient)?;
+        ensure!(
+            envelope.sender.fingerprint != envelope.recipient.fingerprint,
+            "same-identity parcels are not supported; sender and recipient must differ"
+        );
         let own = self.card()?;
         if envelope.recipient.fingerprint == own.fingerprint {
             ensure!(
@@ -817,6 +1144,43 @@ impl Profile {
     ) -> Result<(Vec<u8>, String)> {
         fsutil::directory(directory)?;
         self.exact_entries(directory, &["receipt.json", "receipt.minisig"])?;
+        self.read_receipt_files(directory, authenticated)
+    }
+
+    fn read_acknowledgment(
+        &self,
+        directory: &Path,
+        connection: &Connection,
+    ) -> Result<(AuthenticatedEnvelope, Vec<u8>, String)> {
+        fsutil::directory(directory)?;
+        self.exact_entries(
+            directory,
+            &[
+                "receipt.json",
+                "receipt.minisig",
+                "envelope.json",
+                "envelope.minisig",
+            ],
+        )?;
+        let raw = fsutil::read_bounded(&directory.join("envelope.json"), MAX_ENVELOPE)?;
+        let signature = fsutil::read_bounded(&directory.join("envelope.minisig"), 2048)?;
+        // authenticate pins both bindings to our identity and the explicitly
+        // trusted contact. Keys carried by this artifact never grant trust.
+        let authenticated =
+            self.authenticate(raw, fsutil::utf8(&signature)?.to_owned(), connection)?;
+        ensure!(
+            authenticated.envelope.sender.fingerprint == self.card()?.fingerprint,
+            "acknowledgment belongs to another sender"
+        );
+        let (raw, signature) = self.read_receipt_files(directory, &authenticated)?;
+        Ok((authenticated, raw, signature))
+    }
+
+    fn read_receipt_files(
+        &self,
+        directory: &Path,
+        authenticated: &AuthenticatedEnvelope,
+    ) -> Result<(Vec<u8>, String)> {
         let raw = fsutil::read_bounded(&directory.join("receipt.json"), MAX_ENVELOPE)?;
         let signature = fsutil::read_bounded(&directory.join("receipt.minisig"), 2048)?;
         let signature = fsutil::utf8(&signature)?.to_owned();
@@ -828,6 +1192,35 @@ impl Profile {
             &signature,
         )?;
         Ok((raw, signature))
+    }
+
+    fn verify_outgoing_copy(
+        &self,
+        directory: &Path,
+        expected: &AuthenticatedEnvelope,
+        connection: &Connection,
+    ) -> Result<()> {
+        let actual = self
+            .load_envelope(directory, connection)
+            .context("retained local outgoing envelope is missing or damaged")?;
+        ensure!(
+            actual.raw == expected.raw && actual.signature == expected.signature,
+            "retained outgoing envelope conflicts with confirmed original"
+        );
+        self.verify_outgoing_shards(directory, &actual)
+    }
+
+    fn verify_outgoing_shards(
+        &self,
+        directory: &Path,
+        authenticated: &AuthenticatedEnvelope,
+    ) -> Result<()> {
+        let health = codec::inspect(directory, &authenticated.envelope.groups)?;
+        ensure!(
+            health.iter().all(|group| group.missing_shards.is_empty()),
+            "local immutable outgoing parcel is damaged"
+        );
+        Ok(())
     }
 
     fn finish_incoming(
@@ -853,6 +1246,7 @@ impl Profile {
             parcel_path: None,
             received_path: Some(destination.join("files")),
             receipt_path: None,
+            local_error: None,
             created_at: envelope.created_at.clone(),
             updated_at: now.clone(),
         };
@@ -916,32 +1310,10 @@ impl Profile {
             parcel_path: Some(path),
             received_path: None,
             receipt_path: None,
+            local_error: None,
             created_at: envelope.created_at.clone(),
             updated_at: fsutil::now(),
         }
-    }
-
-    fn mark_outgoing_failed(&self, connection: &Connection, parcel_id: &str) -> Result<()> {
-        if let Some(mut record) = store::get(connection, parcel_id, Direction::Outgoing)? {
-            // Confirmation and cancellation describe historical facts. Damage
-            // to a retained local copy does not erase either fact.
-            if !matches!(
-                record.state,
-                DeliveryState::Confirmed | DeliveryState::Cancelled
-            ) {
-                let state = if self.cancelled(parcel_id)? {
-                    DeliveryState::Cancelled
-                } else {
-                    DeliveryState::Failed
-                };
-                if record.state != state {
-                    record.state = state;
-                    record.updated_at = fsutil::now();
-                    store::save(connection, &record)?;
-                }
-            }
-        }
-        Ok(())
     }
 
     fn mark_failed(&self, connection: &Connection, parcel_id: &str) -> Result<()> {

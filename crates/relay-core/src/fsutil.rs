@@ -102,10 +102,17 @@ pub(crate) fn selected_file(path: &Path) -> Result<std::path::PathBuf> {
 
 pub(crate) fn open_read(path: &Path) -> Result<File> {
     no_symlink_components(path)?;
+    ensure!(
+        fs::symlink_metadata(path)?.is_file(),
+        "not a regular file: {}",
+        path.display()
+    );
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
-    options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    // A path can change after inspection. Never wait for a FIFO writer before
+    // the opened descriptor's regular-file check below can reject it.
+    options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
     let file = options
         .open(path)
         .with_context(|| format!("cannot open {}", path.display()))?;
@@ -262,6 +269,70 @@ pub(crate) fn assert_absent(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn open_read_accepts_regular_files() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        let path = root.join("regular");
+        fs::write(&path, b"synthetic regular file")?;
+        assert_eq!(read_bounded(&path, 64)?, b"synthetic regular file");
+        assert!(open_read(&root).is_err());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_read_refuses_symbolic_links_and_devices() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        fs::write(root.join("regular"), b"synthetic regular file")?;
+        let link = root.join("link");
+        std::os::unix::fs::symlink(root.join("regular"), &link)?;
+        assert!(open_read(&link).is_err());
+        let ancestor = root.join("ancestor");
+        std::os::unix::fs::symlink(&root, &ancestor)?;
+        assert!(open_read(&ancestor.join("regular")).is_err());
+        assert!(open_read(Path::new("/dev/null"))
+            .unwrap_err()
+            .to_string()
+            .contains("not a regular file"));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_read_refuses_fifo_without_waiting_for_a_writer() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        let fifo = root.join("fifo");
+        let name = std::ffi::CString::new(fifo.as_os_str().as_bytes())?;
+        let result = unsafe { libc::mkfifo(name.as_ptr(), 0o600) };
+        ensure!(result == 0, "{}", std::io::Error::last_os_error());
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let path = fifo.clone();
+        let reader = std::thread::spawn(move || {
+            let _ = sender.send(open_read(&path).map(|_| ()));
+        });
+        let result = receiver.recv_timeout(Duration::from_secs(5));
+        if result.is_err() {
+            // Release a regressed blocking open so a failed test does not
+            // leave its worker waiting indefinitely.
+            let _writer = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&fifo)?;
+            reader.join().expect("FIFO reader panicked");
+            anyhow::bail!("opening a FIFO waited for a writer");
+        }
+        reader.join().expect("FIFO reader panicked");
+        assert!(result?
+            .unwrap_err()
+            .to_string()
+            .contains("not a regular file"));
+        Ok(())
+    }
 
     #[test]
     fn atomic_publication_never_replaces_existing_directory() -> Result<()> {

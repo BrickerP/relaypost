@@ -55,11 +55,12 @@ pub struct RelayApp {
     parcel_input: String,
     inspection: Option<Inspection>,
     received: Option<ReceiveResult>,
-    selected_delivery: Option<String>,
+    selected_delivery: Option<(String, Direction)>,
     recovery: Option<RecoverySummary>,
     trust_contact: Option<Contact>,
     trust_fingerprint: String,
     cancel_id: Option<String>,
+    discard_incomplete: bool,
 }
 
 impl RelayApp {
@@ -94,6 +95,7 @@ impl RelayApp {
             trust_contact: None,
             trust_fingerprint: String::new(),
             cancel_id: None,
+            discard_incomplete: false,
         };
         app.start(&context.egui_ctx, Action::Refresh);
         app
@@ -159,16 +161,17 @@ impl RelayApp {
                     Payload::Measured(bytes) => self.selected_bytes = Some(bytes),
                     Payload::Sealed(details) => {
                         self.sealed_id = Some(details.record.parcel_id.clone());
-                        self.selected_delivery = Some(details.record.parcel_id.clone());
+                        self.selected_delivery = Some((details.record.parcel_id.clone(), Direction::Outgoing));
                         self.sealed_inspection = Some(details.inspection);
                         self.sealed_file_bytes = Some(details.file_bytes);
                     }
                     Payload::Inspected(inspection) => self.inspection = Some(inspection),
                     Payload::Received(result) => {
-                        self.selected_delivery = Some(result.record.parcel_id.clone());
+                        self.selected_delivery = Some((result.record.parcel_id.clone(), Direction::Incoming));
                         self.received = Some(*result);
                     }
                     Payload::Recovered(summary) => self.recovery = Some(summary),
+                    Payload::Discarded => self.recovery = None,
                 }
             }
         }
@@ -337,7 +340,7 @@ impl RelayApp {
             let trusted: Vec<_> = self
                 .contacts
                 .iter()
-                .filter(|contact| contact.verified)
+                .filter(|contact| contact.verified && self.identity.as_ref().is_none_or(|own| own.fingerprint != contact.card.fingerprint))
                 .cloned()
                 .collect();
             if trusted.is_empty() {
@@ -460,7 +463,7 @@ impl RelayApp {
                 .and_then(|id| {
                     self.deliveries
                         .iter()
-                        .find(|record| record.parcel_id == *id)
+                        .find(|record| record.parcel_id == *id && record.direction == Direction::Outgoing)
                 })
                 .cloned();
             if let Some(record) = sealed {
@@ -720,15 +723,17 @@ impl RelayApp {
                                 );
                                 if ui
                                     .selectable_label(
-                                        self.selected_delivery.as_deref()
-                                            == Some(record.parcel_id.as_str()),
+                                        self.selected_delivery.as_ref().is_some_and(|(id, direction)| id == &record.parcel_id && direction == &record.direction),
                                         label,
                                     )
                                     .clicked()
                                 {
-                                    self.selected_delivery = Some(record.parcel_id.clone());
+                                    self.selected_delivery = Some((record.parcel_id.clone(), record.direction.clone()));
                                 }
                                 state_badge(ui, &record.state);
+                                if record.local_error.is_some() {
+                                    ui.label(RichText::new("LOCAL COPY NEEDS ATTENTION").small().color(RED));
+                                }
                             });
                             ui.separator();
                         }
@@ -737,10 +742,10 @@ impl RelayApp {
             let selected = self
                 .selected_delivery
                 .as_ref()
-                .and_then(|id| {
+                .and_then(|(id, direction)| {
                     self.deliveries
                         .iter()
-                        .find(|record| record.parcel_id == *id)
+                        .find(|record| &record.parcel_id == id && &record.direction == direction)
                 })
                 .cloned();
             if let Some(record) = selected {
@@ -778,7 +783,7 @@ impl RelayApp {
         ui.add_space(16.0);
         surface(ui, |ui| {
             ui.collapsing("Recover local records after an interrupted operation", |ui| {
-                ui.label("Re-check published batches, rebuild missing index entries, and recover missing receipts. Changed content is reported as a conflict.");
+                ui.label("Resume fully verified receive stages, check saved batches, and restore delivery records and receipts. Changed content is reported as a conflict.");
                 password_field(ui, &mut self.password);
                 if ui.add_enabled(!self.password.is_empty(), egui::Button::new("Verify & recover local records")).clicked() {
                     let password = self.take_password();
@@ -787,6 +792,10 @@ impl RelayApp {
                 if let Some(summary) = &self.recovery {
                     ui.label(format!("{} recovered · {} pending · {} conflicts", summary.recovered, summary.pending, summary.conflicts.len()));
                     for conflict in &summary.conflicts { ui.label(RichText::new(conflict).color(RED)); }
+                }
+                ui.add_space(8.0);
+                if ui.button("Discard interrupted receive work…").clicked() {
+                    self.discard_incomplete = true;
                 }
             });
         });
@@ -1000,6 +1009,30 @@ impl RelayApp {
                 self.cancel_id = None;
             }
         }
+        if self.discard_incomplete {
+            let mut close = false;
+            egui::Window::new("Discard interrupted receives?")
+                .collapsible(false)
+                .resizable(false)
+                .default_width(460.0)
+                .show(context, |ui| {
+                    ui.add_enabled_ui(!self.busy(), |ui| {
+                        ui.label("Delete unfinished temporary receive data in this profile. Import the parcel again from your carrier when you want to receive it.");
+                        ui.horizontal(|ui| {
+                            if ui.button(RichText::new("Discard interrupted work").color(RED)).clicked() {
+                                self.start(context, Action::DiscardIncomplete);
+                                close = true;
+                            }
+                            if ui.button("Keep temporary work").clicked() {
+                                close = true;
+                            }
+                        });
+                    });
+                });
+            if close {
+                self.discard_incomplete = false;
+            }
+        }
     }
 
     fn shortcuts(&mut self, context: &egui::Context) {
@@ -1152,6 +1185,9 @@ fn value(ui: &mut Ui, label: &str, text: &str) {
 fn draw_record(ui: &mut Ui, record: &ParcelRecord) {
     state_badge(ui, &record.state);
     ui.label(state_description(&record.state));
+    if let Some(error) = &record.local_error {
+        ui.label(RichText::new(format!("Local copy needs attention: {error}")).color(RED));
+    }
     ui.add_space(6.0);
     ui.label(format!(
         "{} files · {} original data",

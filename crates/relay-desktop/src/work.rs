@@ -35,6 +35,7 @@ pub enum Action {
     ExportReceipt(String, PathBuf),
     ImportReceipt(PathBuf),
     Recover(Zeroizing<String>),
+    DiscardIncomplete,
     Cancel(String),
 }
 
@@ -54,6 +55,7 @@ impl Action {
             Self::ExportReceipt(..) => "Exporting signed receipt…",
             Self::ImportReceipt(_) => "Verifying returned receipt…",
             Self::Recover(_) => "Checking committed files and recovering local records…",
+            Self::DiscardIncomplete => "Discarding interrupted receive work…",
             Self::Cancel(_) => "Cancelling future local exports…",
         }
     }
@@ -66,6 +68,7 @@ pub enum Payload {
     Inspected(Inspection),
     Received(Box<ReceiveResult>),
     Recovered(RecoverySummary),
+    Discarded,
 }
 
 pub struct SealedDetails {
@@ -212,6 +215,13 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
                 "Future local exports cancelled. Copies already on a carrier remain valid."
                     .to_owned(),
                 Payload::None,
+            )
+        }
+        Action::DiscardIncomplete => {
+            let count = profile.discard_incomplete_receives()?;
+            (
+                format!("Discarded {count} interrupted receive staging directories."),
+                Payload::Discarded,
             )
         }
     };

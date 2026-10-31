@@ -696,112 +696,589 @@ fn unverified_display_names_cannot_shadow_a_pinned_full_fingerprint() {
     );
 }
 
-fn outgoing_state(profile: &Profile, parcel_id: &str) -> DeliveryState {
+fn outgoing_record(profile: &Profile, parcel_id: &str) -> ParcelRecord {
     profile
         .deliveries()
         .unwrap()
         .into_iter()
         .find(|record| record.direction == Direction::Outgoing && record.parcel_id == parcel_id)
         .expect("known outgoing delivery")
-        .state
+}
+
+fn outgoing_state(profile: &Profile, parcel_id: &str) -> DeliveryState {
+    outgoing_record(profile, parcel_id).state
 }
 
 #[test]
-fn outgoing_recovery_marks_active_damage_failed_and_restores_only_verified_parcels() {
+fn outgoing_health_preserves_each_delivery_phase_and_clears_only_after_exact_restoration() {
     let pair = Pair::new(true);
-    let record = pair.seal(b"durable outgoing failure and restoration fixture");
-    let original = record.parcel_path.as_ref().unwrap();
-    let backup = pair.root.join("synthetic-outbox-backup");
-    copy_tree(original, &backup);
-    corrupt(&shard(original, 0, 0));
-    assert!(!pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Failed
-    );
-    fs::copy(shard(&backup, 0, 0), shard(original, 0, 0)).unwrap();
-    assert!(pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Ready
-    );
-    fs::remove_dir_all(original).unwrap();
-    assert!(!pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Failed
-    );
-    copy_tree(&backup, original);
-    assert!(pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Ready
-    );
-
-    pair.alice.cancel(&record.parcel_id).unwrap();
-    corrupt(&shard(original, 0, 0));
-    pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Cancelled
-    );
-    fs::remove_dir_all(original).unwrap();
-    pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Cancelled
-    );
-    copy_tree(&backup, original);
-    pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Cancelled
-    );
-    assert!(pair
-        .alice
-        .export_parcel(&record.parcel_id, &pair.root.join("cancel-still-blocks"))
-        .is_err());
+    for (ordinal, phase) in [
+        DeliveryState::Ready,
+        DeliveryState::WaitingReceipt,
+        DeliveryState::Cancelled,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let record = pair.seal(b"durable outgoing health and restoration fixture");
+        match phase {
+            DeliveryState::WaitingReceipt => {
+                pair.export(&record, "exported-before-local-damage");
+            }
+            DeliveryState::Cancelled => pair.alice.cancel(&record.parcel_id).unwrap(),
+            _ => {}
+        }
+        let original = record.parcel_path.as_ref().unwrap();
+        let backup = pair.root.join(format!("synthetic-outbox-backup-{ordinal}"));
+        copy_tree(original, &backup);
+        for missing in [false, true] {
+            if missing {
+                fs::remove_dir_all(original).unwrap();
+            } else {
+                corrupt(&shard(original, 0, 0));
+            }
+            assert!(!pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
+            let damaged = outgoing_record(&pair.alice, &record.parcel_id);
+            assert_eq!(damaged.state, phase);
+            assert!(damaged.local_error.is_some());
+            assert!(pair
+                .alice
+                .export_parcel(&record.parcel_id, &pair.root.join("damaged-export"))
+                .is_err());
+            if missing {
+                copy_tree(&backup, original);
+            } else {
+                fs::copy(shard(&backup, 0, 0), shard(original, 0, 0)).unwrap();
+            }
+            assert!(pair.alice.recover(PASSWORD).unwrap().conflicts.is_empty());
+            let restored = outgoing_record(&pair.alice, &record.parcel_id);
+            assert_eq!(restored.state, phase);
+            assert!(restored.local_error.is_none());
+        }
+        if phase == DeliveryState::Cancelled {
+            assert!(pair
+                .alice
+                .export_parcel(&record.parcel_id, &pair.root.join("cancel-still-blocks"))
+                .is_err());
+        }
+    }
 }
 
 #[test]
-fn verified_acknowledgments_override_failed_indexes_and_confirmation_survives_outbox_loss() {
+fn durable_acknowledgments_rebuild_stale_or_missing_indexes_without_healthy_source_bytes() {
     let pair = Pair::new(true);
     let record = pair.seal(b"confirmation is a durable recipient statement");
-    let original = record.parcel_path.as_ref().unwrap();
     let parcel = pair.export(&record, "confirmed-carrier");
     pair.bob.receive_parcel(&parcel, PASSWORD).unwrap();
     let receipt = pair
         .bob
         .export_receipt(&record.parcel_id, &pair.root.join("confirmed-return"))
         .unwrap();
-    let mut confirmed = pair.alice.import_receipt(&receipt).unwrap();
+    let confirmed = pair.alice.import_receipt(&receipt).unwrap();
     assert_eq!(confirmed.state, DeliveryState::Confirmed);
-    // Reproduce an index update lost after the verified acknowledgment became
-    // durable. Recovery must derive confirmation from the acknowledgment.
-    confirmed.state = DeliveryState::Failed;
-    let database = rusqlite::Connection::open(pair.root.join("alice/state.sqlite3")).unwrap();
-    database.execute("UPDATE deliveries SET record_json = ?1 WHERE parcel_id = ?2 AND direction = 'Outgoing'",
-        rusqlite::params![serde_json::to_string(&confirmed).unwrap(), record.parcel_id]).unwrap();
+    assert_eq!(files(&receipt).len(), 2, "transport receipts stay minimal");
+    let acknowledgment = pair.root.join("alice/acknowledgments").join(&record.parcel_id);
+    assert_eq!(files(&acknowledgment).len(), 4);
+    for missing_index in [false, true] {
+        for missing_outbox in [false, true] {
+            let home = pair
+                .root
+                .join(format!("ack-restart-{missing_index}-{missing_outbox}"));
+            copy_tree(&pair.root.join("alice"), &home);
+            let restarted = Profile::open(&home).unwrap();
+            let database = rusqlite::Connection::open(home.join("state.sqlite3")).unwrap();
+            if missing_index {
+                database
+                    .execute("DELETE FROM deliveries WHERE direction = 'Outgoing'", [])
+                    .unwrap();
+            } else {
+                // The acknowledgment directory survived, but the last database
+                // update did not. A fresh WaitingReceipt row must not lose proof.
+                let mut stale = confirmed.clone();
+                stale.state = DeliveryState::WaitingReceipt;
+                stale.receipt_path = None;
+                stale.parcel_path = Some(home.join("outbox").join(&record.parcel_id));
+                database
+                    .execute(
+                        "UPDATE deliveries SET record_json = ?1 WHERE direction = 'Outgoing'",
+                        [serde_json::to_string(&stale).unwrap()],
+                    )
+                    .unwrap();
+            }
+            drop(database);
+            let source = home.join("outbox").join(&record.parcel_id);
+            if missing_outbox {
+                fs::remove_dir_all(&source).unwrap();
+            } else {
+                corrupt(&shard(&source, 0, 0));
+            }
+            let summary = restarted.recover(PASSWORD).unwrap();
+            assert!(
+                !summary.conflicts.is_empty(),
+                "source damage remains visible"
+            );
+            let recovered = outgoing_record(&restarted, &record.parcel_id);
+            assert_eq!(recovered.state, DeliveryState::Confirmed);
+            assert!(recovered.local_error.is_some());
+            assert_eq!(
+                recovered.receipt_path,
+                Some(home.join("acknowledgments").join(&record.parcel_id))
+            );
+            restarted.recover(PASSWORD).unwrap();
+            assert_eq!(
+                outgoing_state(&restarted, &record.parcel_id),
+                DeliveryState::Confirmed
+            );
+            if !missing_outbox {
+                fs::remove_dir_all(&source).unwrap();
+            }
+            copy_tree(record.parcel_path.as_ref().unwrap(), &source);
+            assert!(restarted.recover(PASSWORD).unwrap().conflicts.is_empty());
+            let restored = outgoing_record(&restarted, &record.parcel_id);
+            assert_eq!(restored.state, DeliveryState::Confirmed);
+            assert!(restored.local_error.is_none());
+        }
+    }
+}
+
+#[test]
+fn damaged_acknowledgment_evidence_cannot_confirm_a_missing_outbox() {
+    let pair = Pair::new(true);
+    let record = pair.seal(b"all four acknowledgment files must authenticate");
+    let parcel = pair.export(&record, "ack-tamper-carrier");
+    pair.bob.receive_parcel(&parcel, PASSWORD).unwrap();
+    let receipt = pair
+        .bob
+        .export_receipt(&record.parcel_id, &pair.root.join("ack-tamper-return"))
+        .unwrap();
+    let confirmed = pair.alice.import_receipt(&receipt).unwrap();
+    for name in [
+        "receipt.json",
+        "receipt.minisig",
+        "envelope.json",
+        "envelope.minisig",
+    ] {
+        for missing_index in [false, true] {
+            let home = pair.root.join(format!("invalid-ack-{name}-{missing_index}"));
+            copy_tree(&pair.root.join("alice"), &home);
+            let database = rusqlite::Connection::open(home.join("state.sqlite3")).unwrap();
+            if missing_index {
+                database
+                    .execute("DELETE FROM deliveries WHERE direction = 'Outgoing'", [])
+                    .unwrap();
+            } else {
+                let mut stale = confirmed.clone();
+                stale.state = DeliveryState::WaitingReceipt;
+                stale.receipt_path = None;
+                stale.parcel_path = Some(home.join("outbox").join(&record.parcel_id));
+                database
+                    .execute(
+                        "UPDATE deliveries SET record_json = ?1 WHERE direction = 'Outgoing'",
+                        [serde_json::to_string(&stale).unwrap()],
+                    )
+                    .unwrap();
+            }
+            drop(database);
+            fs::remove_dir_all(home.join("outbox").join(&record.parcel_id)).unwrap();
+            corrupt(
+                &home
+                    .join("acknowledgments")
+                    .join(&record.parcel_id)
+                    .join(name),
+            );
+            let restarted = Profile::open(&home).unwrap();
+            let summary = restarted.recover(PASSWORD).unwrap();
+            assert!(!summary.conflicts.is_empty());
+            let rows = restarted.deliveries().unwrap();
+            assert!(rows.iter().all(|row| row.state != DeliveryState::Confirmed));
+            if !missing_index {
+                let outgoing = outgoing_record(&restarted, &record.parcel_id);
+                assert_eq!(outgoing.state, DeliveryState::WaitingReceipt);
+                assert!(outgoing.local_error.is_some());
+            }
+        }
+    }
+}
+
+fn remove_incoming_index_and_receipt(pair: &Pair, parcel_id: &str) {
+    let database = rusqlite::Connection::open(pair.root.join("bob/state.sqlite3")).unwrap();
+    assert_eq!(
+        database
+            .execute(
+                "DELETE FROM deliveries WHERE direction = 'Incoming' AND parcel_id = ?1",
+                [parcel_id],
+            )
+            .unwrap(),
+        1
+    );
     drop(database);
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Failed
+    fs::remove_dir_all(pair.root.join("bob/receipts").join(parcel_id)).unwrap();
+}
+
+// Preserve real authenticated metadata from an actual synthetic receive, then
+// recreate one durable crash window without exposing production fault controls.
+fn stage_received_batch(pair: &Pair, received: &ParcelRecord, keep_published: bool) -> PathBuf {
+    let staging = pair.root.join("bob/inbox/.staging/batch-SYNTHETIC-crash");
+    fs::create_dir(&staging).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&staging, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let published = received.received_path.as_ref().unwrap();
+    if keep_published {
+        copy_tree(published, &staging.join("batch"));
+    } else {
+        fs::rename(published, staging.join("batch")).unwrap();
+    }
+    fs::write(
+        staging.join("archive.tar"),
+        b"SYNTHETIC retained plaintext archive",
+    )
+    .unwrap();
+    fs::write(
+        staging.join("ciphertext.age"),
+        b"SYNTHETIC retained ciphertext",
+    )
+    .unwrap();
+    staging
+}
+
+#[test]
+fn recovery_publishes_a_fully_prepared_stage_before_regenerating_its_receipt() {
+    let pair = Pair::new(true);
+    let payload = b"prepared but not yet published synthetic content";
+    let outgoing = pair.seal(payload);
+    let parcel = pair.export(&outgoing, "prepublication-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let published = received.received_path.as_ref().unwrap();
+    let digest = tree_digest(published);
+    let stage = stage_received_batch(&pair, &received, false);
+    remove_incoming_index_and_receipt(&pair, &outgoing.parcel_id);
+    assert!(!published.exists());
+    assert_not_committed(
+        &pair.bob,
+        &outgoing.parcel_id,
+        &pair.root.join("early-return"),
     );
-    pair.alice.recover(PASSWORD).unwrap();
+    let restarted = Profile::open(pair.root.join("bob")).unwrap();
+    let summary = restarted.recover(PASSWORD).unwrap();
+    assert_eq!(summary.recovered, 1);
+    assert_eq!(summary.pending, 0);
+    assert!(summary.conflicts.is_empty());
+    assert!(!stage.exists(), "plaintext staging wrapper must be removed");
+    assert_eq!(tree_digest(published), digest);
+    let rows = restarted.deliveries().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_payload(&rows[0], payload);
+    let receipt = restarted
+        .export_receipt(&outgoing.parcel_id, &pair.root.join("resumed-return"))
+        .unwrap();
     assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
+        pair.alice.import_receipt(&receipt).unwrap().state,
         DeliveryState::Confirmed
     );
-    corrupt(&shard(original, 0, 0));
-    pair.alice.recover(PASSWORD).unwrap();
-    assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
-        DeliveryState::Confirmed
+    assert_eq!(restarted.recover(PASSWORD).unwrap().recovered, 0);
+}
+
+#[test]
+fn recovery_removes_a_superseded_matching_stage_and_its_plaintext_archive() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"already published synthetic content");
+    let parcel = pair.export(&outgoing, "postpublication-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let published = received.received_path.as_ref().unwrap();
+    let digest = tree_digest(published);
+    let stage = stage_received_batch(&pair, &received, true);
+    let summary = pair.bob.recover(PASSWORD).unwrap();
+    assert_eq!(summary.pending, 0);
+    assert!(summary.conflicts.is_empty());
+    assert!(!stage.exists());
+    assert_eq!(tree_digest(published), digest);
+    assert_payload(
+        &pair.bob.deliveries().unwrap()[0],
+        b"already published synthetic content",
     );
-    fs::remove_dir_all(original).unwrap();
-    pair.alice.recover(PASSWORD).unwrap();
+}
+
+#[test]
+fn recovery_cleans_actual_postpublication_residue_only_while_the_final_batch_verifies() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"actual postpublication wrapper has no batch child");
+    let parcel = pair.export(&outgoing, "actual-postpublication-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let published = received.received_path.as_ref().unwrap();
+    let digest = tree_digest(published);
+    for changed_final in [false, true] {
+        let stage = pair
+            .root
+            .join("bob/inbox/.staging")
+            .join(format!("batch-{}-fixture", outgoing.parcel_id));
+        fs::create_dir(&stage).unwrap();
+        fs::write(stage.join("archive.tar"), b"SYNTHETIC remaining plaintext").unwrap();
+        fs::write(stage.join("ciphertext.age"), b"SYNTHETIC remaining ciphertext").unwrap();
+        assert!(!stage.join("batch").exists());
+        let staged_digest = tree_digest(&stage);
+        if changed_final {
+            fs::write(payload_path(&received), b"EXTERNAL postpublication edit").unwrap();
+        }
+        let summary = pair.bob.recover(PASSWORD).unwrap();
+        if changed_final {
+            assert_eq!(summary.pending, 1);
+            assert!(!summary.conflicts.is_empty());
+            assert_eq!(tree_digest(&stage), staged_digest);
+            assert_eq!(
+                fs::read(payload_path(&received)).unwrap(),
+                b"EXTERNAL postpublication edit"
+            );
+            assert_not_committed(
+                &pair.bob,
+                &outgoing.parcel_id,
+                &pair.root.join("changed-postpublication-return"),
+            );
+        } else {
+            assert_eq!(summary.pending, 0);
+            assert!(summary.conflicts.is_empty());
+            assert!(!stage.exists());
+            assert_eq!(tree_digest(published), digest);
+        }
+    }
+}
+
+#[test]
+fn recovery_preserves_the_only_good_stage_when_published_content_conflicts() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"good staged evidence must remain recoverable");
+    let parcel = pair.export(&outgoing, "stage-conflict-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let stage = stage_received_batch(&pair, &received, true);
+    let staged_digest = tree_digest(&stage);
+    let published_payload = payload_path(&received);
+    fs::write(&published_payload, b"EXTERNAL EDIT must not be replaced").unwrap();
+    let summary = pair.bob.recover(PASSWORD).unwrap();
+    assert_eq!(summary.pending, 1);
+    assert!(!summary.conflicts.is_empty());
+    assert_eq!(tree_digest(&stage), staged_digest);
     assert_eq!(
-        outgoing_state(&pair.alice, &record.parcel_id),
+        fs::read(published_payload).unwrap(),
+        b"EXTERNAL EDIT must not be replaced"
+    );
+    assert_not_committed(
+        &pair.bob,
+        &outgoing.parcel_id,
+        &pair.root.join("conflict-return"),
+    );
+}
+
+#[test]
+fn recovery_keeps_corrupt_prepared_stages_pending_without_publication_or_receipt() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"a prepared marker alone grants no commit authority");
+    let parcel = pair.export(&outgoing, "invalid-stage-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let stage = stage_received_batch(&pair, &received, false);
+    remove_incoming_index_and_receipt(&pair, &outgoing.parcel_id);
+    corrupt(&stage.join("batch/files/payload.bin"));
+    let stage_digest = tree_digest(&stage);
+    let summary = pair.bob.recover(PASSWORD).unwrap();
+    assert_eq!(summary.recovered, 0);
+    assert_eq!(summary.pending, 1);
+    assert!(!summary.conflicts.is_empty());
+    assert!(!received.received_path.as_ref().unwrap().exists());
+    assert_eq!(tree_digest(&stage), stage_digest);
+    assert_not_committed(
+        &pair.bob,
+        &outgoing.parcel_id,
+        &pair.root.join("invalid-stage-return"),
+    );
+}
+
+#[test]
+fn incomplete_stages_remain_pending_until_explicit_discard_and_unmanaged_data_survives() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"incomplete synthetic receive cancellation");
+    let parcel = pair.export(&outgoing, "partial-stage-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    let stage = stage_received_batch(&pair, &received, false);
+    remove_incoming_index_and_receipt(&pair, &outgoing.parcel_id);
+    fs::remove_file(stage.join("batch/.relaypost/prepared.json")).unwrap();
+    let stage_digest = tree_digest(&stage);
+    let summary = pair.bob.recover(PASSWORD).unwrap();
+    assert_eq!(summary.recovered, 0);
+    assert_eq!(summary.pending, 1);
+    assert!(summary.conflicts.is_empty());
+    assert_eq!(tree_digest(&stage), stage_digest);
+    assert_not_committed(
+        &pair.bob,
+        &outgoing.parcel_id,
+        &pair.root.join("partial-return"),
+    );
+    let unrelated = pair.root.join("bob/inbox/.staging/user-notes");
+    fs::create_dir(&unrelated).unwrap();
+    fs::write(unrelated.join("keep.txt"), b"unmanaged synthetic user data").unwrap();
+    let outside = pair.root.join("outside-staging.txt");
+    fs::write(&outside, b"unrelated external synthetic data").unwrap();
+    assert_eq!(pair.bob.discard_incomplete_receives().unwrap(), 1);
+    assert!(!stage.exists());
+    assert_eq!(
+        fs::read(unrelated.join("keep.txt")).unwrap(),
+        b"unmanaged synthetic user data"
+    );
+    assert_eq!(
+        fs::read(outside).unwrap(),
+        b"unrelated external synthetic data"
+    );
+    assert_eq!(pair.bob.discard_incomplete_receives().unwrap(), 0);
+    assert!(!received.received_path.as_ref().unwrap().exists());
+}
+
+#[test]
+fn self_cards_and_self_send_are_rejected_without_any_delivery_records() {
+    let pair = Pair::new(true);
+    assert!(pair
+        .alice
+        .import_contact(&pair.root.join("alice.card"))
+        .is_err());
+    assert_eq!(pair.alice.contacts().unwrap().len(), 1);
+    // Also model an old database that already contains a trusted self-contact.
+    let database = rusqlite::Connection::open(pair.root.join("alice/state.sqlite3")).unwrap();
+    database
+        .execute(
+            "INSERT INTO contacts (fingerprint, card_json, verified) VALUES (?1, ?2, 1)",
+            rusqlite::params![
+                pair.alice_card.fingerprint,
+                serde_json::to_string(&pair.alice_card).unwrap()
+            ],
+        )
+        .unwrap();
+    drop(database);
+    let source = pair.input("self-send.txt", b"SYNTHETIC self-send must fail closed");
+    assert!(pair
+        .alice
+        .seal(&[source], &pair.alice_card.fingerprint, PASSWORD)
+        .is_err());
+    assert!(pair.alice.deliveries().unwrap().is_empty());
+    assert!(pair.bob.deliveries().unwrap().is_empty());
+    assert!(files(&pair.root.join("alice/outbox")).is_empty());
+    assert!(files(&pair.root.join("alice/inbox")).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_stage_discard_rejects_linked_contents_and_preserves_external_targets() {
+    use std::os::unix::fs::symlink;
+    let pair = Pair::new(true);
+    let staging_root = pair.root.join("bob/inbox/.staging");
+    let outside = pair.root.join("outside-cancellation-scope");
+    fs::create_dir(&outside).unwrap();
+    let protected = outside.join("precious.txt");
+    fs::write(&protected, b"SYNTHETIC external target must survive").unwrap();
+    let linked_stage = staging_root.join("batch-SYNTHETIC-linked-root");
+    symlink(&outside, &linked_stage).unwrap();
+    assert_eq!(pair.bob.discard_incomplete_receives().unwrap(), 0);
+    assert!(fs::symlink_metadata(&linked_stage)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    fs::remove_file(&linked_stage).unwrap();
+    let stage = staging_root.join("batch-SYNTHETIC-linked-content");
+    fs::create_dir(&stage).unwrap();
+    symlink(&protected, stage.join("archive.tar")).unwrap();
+    assert!(pair.bob.discard_incomplete_receives().is_err());
+    assert!(fs::symlink_metadata(stage.join("archive.tar"))
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(
+        fs::read(&protected).unwrap(),
+        b"SYNTHETIC external target must survive"
+    );
+    // The refused cleanup must release the profile lock for the next operation.
+    assert!(pair.bob.deliveries().unwrap().is_empty());
+}
+
+#[cfg(unix)]
+fn fifo_operation_returns_promptly(home: &Path, source: &Path, fifo: &Path, receipt: bool) {
+    use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    let home = home.to_path_buf();
+    let source = source.to_path_buf();
+    let (sender, receiver) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let profile = Profile::open(home).unwrap();
+        let rejected = if receipt {
+            profile.import_receipt(&source).is_err()
+        } else {
+            profile.inspect_parcel(&source).is_err()
+        };
+        sender.send(rejected).unwrap();
+    });
+    let rejected = match receiver.recv_timeout(Duration::from_secs(5)) {
+        Ok(rejected) => rejected,
+        Err(error) => {
+            // Rescue a regressed blocking open so CI reports a failed assertion
+            // instead of indefinitely retaining the profile lock or test process.
+            let rescue = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(fifo)
+                .unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+            drop(rescue);
+            let _ = receiver.recv_timeout(Duration::from_secs(5));
+            panic!("FIFO operation waited for a writer: {error}");
+        }
+    };
+    assert!(rejected, "special-file metadata must be refused");
+    worker.join().unwrap();
+}
+
+#[cfg(unix)]
+fn replace_with_fifo(path: &Path) {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    fs::remove_file(path).unwrap();
+    let c_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+    // SAFETY: c_path is a live, NUL-terminated fixture path; mode is private.
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) }, 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn fifo_envelopes_and_receipts_return_without_writers_and_leave_the_profile_usable() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"special-file denial-of-service synthetic fixture");
+    let parcel = pair.export(&outgoing, "fifo-pristine-carrier");
+    for name in ["envelope.json", "envelope.minisig"] {
+        let case = pair.root.join(format!("fifo-{name}.parcel"));
+        copy_tree(&parcel, &case);
+        fs::remove_file(case.join("envelope-copy.json")).unwrap();
+        fs::remove_file(case.join("envelope-copy.minisig")).unwrap();
+        let fifo = case.join(name);
+        replace_with_fifo(&fifo);
+        fifo_operation_returns_promptly(&pair.root.join("bob"), &case, &fifo, false);
+        assert!(pair.bob.inspect_parcel(&parcel).unwrap().recoverable);
+    }
+    pair.bob.receive_parcel(&parcel, PASSWORD).unwrap();
+    let receipt = pair
+        .bob
+        .export_receipt(&outgoing.parcel_id, &pair.root.join("fifo-pristine-return"))
+        .unwrap();
+    for name in ["receipt.json", "receipt.minisig"] {
+        let case = pair.root.join(format!("fifo-{name}.receipt"));
+        copy_tree(&receipt, &case);
+        let fifo = case.join(name);
+        replace_with_fifo(&fifo);
+        fifo_operation_returns_promptly(&pair.root.join("alice"), &case, &fifo, true);
+        assert_eq!(
+            outgoing_state(&pair.alice, &outgoing.parcel_id),
+            DeliveryState::WaitingReceipt
+        );
+    }
+    assert_eq!(
+        pair.alice.import_receipt(&receipt).unwrap().state,
         DeliveryState::Confirmed
     );
 }

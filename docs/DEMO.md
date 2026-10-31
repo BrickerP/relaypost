@@ -29,7 +29,8 @@ The script checks the entire real CLI chain:
 
 1. Initialize two identities, exchange self-signed contact cards, and explicitly
    pin the complete fingerprints. In a real exchange, first compare those
-   fingerprints through a trusted channel.
+   fingerprints through a trusted channel. Reject importing Alice's own card
+   and sending to herself, without creating a delivery.
 2. Seal the sample for Bob and export it to a local carrier directory. Alice's
    state must remain `WaitingReceipt`.
 3. Remove five shards from a copy of the first full group. Inspection must report
@@ -41,10 +42,25 @@ The script checks the entire real CLI chain:
    single destination directory.
 6. Export Bob's signed receipt, return it to Alice, and require the outgoing
    delivery to become `Confirmed` only after receipt verification.
+7. Recreate a durable prepublication window using only that synthetic received
+   batch: move its authenticated files into private staging and remove the
+   synthetic incoming index and receipt. `recover` must verify and publish the
+   prepared batch, regenerate its receipt, preserve the original payload digest,
+   and delete the staging wrapper, including its retained plaintext archive.
+   Also recreate the actual postpublication residue: an ID-bound wrapper with
+   archive and ciphertext but no batch child. Recovery must verify the published
+   batch before deleting that wrapper.
+8. Create an incomplete synthetic receive stage. Normal `recover` must retain it
+   as pending. Run `recover --discard-incomplete` without a password argument;
+   it must remove the managed stage and preserve the committed payload.
+9. Damage a retained outgoing shard after confirmation. `recover` must preserve
+   `Confirmed` while reporting `local_error`. Restore the exact original shard;
+   recovery must clear the health error and retain confirmation.
 
 `demo-report.json` records the actual group health, repaired count, original and
 received SHA-256 values, duplicate outcome, final sender state, and command exit
-codes. CI retains this report with its test logs. The report contains public
+codes, plus the self-send, staged recovery, explicit discard and outgoing health
+checks. CI retains this report with its test logs. The report contains public
 identifiers and synthetic fixture paths; it contains no passwords or private
 keys.
 
@@ -103,6 +119,15 @@ both trust pins, wrong passwords and recipients, card/envelope/receipt tampering
 receipt-gated confirmation, duplicate import, immutable resend, cancellation,
 and externally modified or unexpected destination files.
 
+Outgoing health tests retain `Ready`, `WaitingReceipt`, `Cancelled`, and
+`Confirmed` through source corruption or removal, report the problem separately,
+and clear it only after exact restoration. Durable acknowledgments include the
+recipient's signed receipt and its authenticated original envelope; transport
+receipts remain two files. Tests lose or roll back the outgoing index before
+corrupting or removing the entire outbox parcel, then require recovery to rebuild
+confirmation from those four authenticated acknowledgment files. Tampering with
+any of the four files cannot create confirmation.
+
 The erasure matrix checks a full 20+4 group with zero through four missing data
 shards, corrupt parity shards, and mixed erasures, plus five-erasure refusal. Tail
 tests independently check real per-group budgets from one through four parity
@@ -113,8 +138,19 @@ cover every tail size and exact group boundaries.
 Recovery tests deliberately delete the SQLite incoming index and receipt after
 publication, then reopen the profile. Verified published bytes must recreate the
 index and receipt; externally changed bytes must produce a conflict without a
-new success receipt. This reproduces durable crash-window states; it does not
-simulate a physical power cut. Fault-case receiver homes are copies of a
+new success receipt. Prepared but unpublished stages must resume publication;
+matching already-published stages must lose their superseded plaintext wrapper.
+Conflicting destinations and corrupt prepared stages retain staged evidence,
+and incomplete stages remain pending until explicit cancellation. Cancellation
+preserves unrelated entries and refuses linked contents. Unix FIFO envelope and
+receipt inputs must return without waiting for a writer and release the profile
+lock for subsequent operations; these tests have bounded waits and rescue a
+regressed blocking read so it cannot indefinitely hang CI. Self-card import and
+self-send also fail without creating delivery rows, including a synthetic old
+database containing a trusted self-contact.
+
+These tests reproduce durable crash-window states; they do not simulate a
+physical power cut. Fault-case receiver homes are copies of a
 pristine **synthetic** identity, allowing each case to exercise reconstruction
 without a previous import's duplicate fast path.
 

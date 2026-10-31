@@ -62,6 +62,9 @@ pub struct ParcelRecord {
     pub parcel_path: Option<PathBuf>,
     pub received_path: Option<PathBuf>,
     pub receipt_path: Option<PathBuf>,
+    /// Retained local artifact damage, independent of the outgoing delivery phase.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

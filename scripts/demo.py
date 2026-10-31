@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import sys
 
@@ -46,11 +47,13 @@ def main():
     password.chmod(0o600)
     transcript = []
 
-    def cli(profile, *arguments, expect_error=False):
+    def cli(profile, *arguments, expect_error=False, with_password=True):
         display = f"{profile}: {' '.join(str(arg) for arg in arguments)}"
         print(f"> {display}", flush=True)
-        command = [str(binary), "--home", str(root / profile), "--json",
-                   "--password-file", str(password), *map(str, arguments)]
+        command = [str(binary), "--home", str(root / profile), "--json"]
+        if with_password:
+            command.extend(["--password-file", str(password)])
+        command.extend(map(str, arguments))
         result = subprocess.run(command, capture_output=True, text=True, check=False)
         transcript.append({"profile": profile, "arguments": list(map(str, arguments)),
                            "exit_code": result.returncode})
@@ -84,6 +87,9 @@ def main():
             stream.write(block)
             remaining -= len(block)
     source_hash = digest(source)
+    cli("alice", "contacts", "import", alice_card, expect_error=True)
+    cli("alice", "seal", "--to", alice["fingerprint"], source, expect_error=True)
+    check(cli("alice", "deliveries") == [], "Self-send must not create a delivery")
     record = cli("alice", "seal", "--to", bob["fingerprint"], source)
     parcel_id = record["parcel_id"]
     pristine = Path(cli("alice", "export", parcel_id, "--carrier", root / "carrier"))
@@ -140,6 +146,66 @@ def main():
                        "--carrier", root / "return-carrier"))
     confirmed = cli("alice", "receipt", "import", receipt)
     check(confirmed["state"] == "Confirmed", "Valid return receipt must confirm delivery")
+
+    # Recreate the private durable prepublication state from authenticated
+    # synthetic output. This is a crash-window fixture, not a power-loss test.
+    prepared_stage = root / "bob/inbox/.staging/batch-SYNTHETIC-demo-ready"
+    prepared_stage.mkdir(mode=0o700)
+    shutil.move(str(destination), prepared_stage / "batch")
+    (prepared_stage / "archive.tar").write_bytes(b"SYNTHETIC retained plaintext archive")
+    (prepared_stage / "ciphertext.age").write_bytes(b"SYNTHETIC retained ciphertext")
+    connection = sqlite3.connect(root / "bob/state.sqlite3")
+    try:
+        connection.execute("DELETE FROM deliveries WHERE direction = 'Incoming' AND parcel_id = ?",
+                           (parcel_id,))
+        connection.commit()
+    finally:
+        connection.close()
+    shutil.rmtree(Path(received["record"]["receipt_path"]))
+    resumed = cli("bob", "recover")
+    check(resumed["recovered"] == 1 and resumed["pending"] == 0 and not resumed["conflicts"],
+          "Recovery must publish a verified prepared stage and regenerate its receipt")
+    check(not prepared_stage.exists(), "Recovery must remove retained plaintext staging data")
+    check(digest(matches[0]) == source_hash, "Resumed publication changed authenticated payload")
+    cli("bob", "receipt", "export", parcel_id, "--carrier", root / "resumed-return")
+
+    # Publication renames the batch child out of its wrapper. Exercise the real
+    # residue shape too: only the ID-bound wrapper's archive/ciphertext remain.
+    postpublication_stage = root / f"bob/inbox/.staging/batch-{parcel_id}-demo-committed"
+    postpublication_stage.mkdir(mode=0o700)
+    (postpublication_stage / "archive.tar").write_bytes(b"SYNTHETIC postpublication plaintext")
+    (postpublication_stage / "ciphertext.age").write_bytes(b"SYNTHETIC postpublication ciphertext")
+    cleaned = cli("bob", "recover")
+    check(cleaned["pending"] == 0 and not cleaned["conflicts"] and not postpublication_stage.exists(),
+          "Recovery must verify the final batch before deleting its postpublication residue")
+    check(digest(matches[0]) == source_hash, "Postpublication cleanup changed the payload")
+
+    partial_stage = root / "bob/inbox/.staging/batch-SYNTHETIC-demo-partial"
+    partial_stage.mkdir(mode=0o700)
+    (partial_stage / "archive.tar").write_bytes(b"SYNTHETIC incomplete receive plaintext")
+    pending = cli("bob", "recover")
+    check(pending["pending"] == 1 and partial_stage.exists(),
+          "Normal recovery must retain incomplete staging data for an explicit decision")
+    discarded = cli("bob", "recover", "--discard-incomplete", with_password=False)
+    check(discarded["discarded_staging"] == 1 and not partial_stage.exists(),
+          "Explicit cancellation must remove the managed incomplete stage without unlocking")
+    check(digest(matches[0]) == source_hash, "Staging cancellation changed the published payload")
+    check(cli("bob", "recover")["pending"] == 0, "Cancelled staging must no longer be pending")
+
+    source_shard = Path(record["parcel_path"]) / "groups/g000/s000.bin"
+    retained_bytes = source_shard.read_bytes()
+    damaged_bytes = bytearray(retained_bytes)
+    damaged_bytes[0] ^= 0x80
+    source_shard.write_bytes(damaged_bytes)
+    cli("alice", "recover")
+    unhealthy = next(row for row in cli("alice", "deliveries") if row["parcel_id"] == parcel_id)
+    check(unhealthy["state"] == "Confirmed" and unhealthy.get("local_error"),
+          "Local shard damage must be reported without erasing recipient confirmation")
+    source_shard.write_bytes(retained_bytes)
+    cli("alice", "recover")
+    restored = next(row for row in cli("alice", "deliveries") if row["parcel_id"] == parcel_id)
+    check(restored["state"] == "Confirmed" and not restored.get("local_error"),
+          "Exact outgoing restoration must clear local health without changing delivery phase")
     check(digest(source) == source_hash, "Source file was changed")
     report = {
         "conditions": "two isolated profiles and separate CLI processes on one machine; directory carrier",
@@ -153,6 +219,11 @@ def main():
         "duplicate": duplicate["duplicate"],
         "final_sender_state": confirmed["state"],
         "over_budget_rejected": True,
+        "self_send_rejected": True,
+        "prepared_stage_resumed": True,
+        "postpublication_stage_cleaned": True,
+        "incomplete_stage_explicitly_discarded": True,
+        "confirmed_health_restored": True,
         "commands": transcript,
     }
     (root / "demo-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
