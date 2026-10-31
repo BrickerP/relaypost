@@ -1,0 +1,176 @@
+name: Verify and package
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  dependencies:
+    name: Resolve reproducible dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Create the initial lockfile or verify the committed lockfile
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          if test -f Cargo.lock; then
+            cargo metadata --locked --format-version 1 > ci-logs/dependency-metadata.json
+          else
+            cargo generate-lockfile 2>&1 | tee ci-logs/dependencies.log
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-logs
+          path: ci-logs/
+          retention-days: 30
+
+  format:
+    name: Rust formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting and capture a reviewable fix on failure
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          if cargo fmt --all -- --check 2>&1 | tee ci-logs/rustfmt.log; then
+            exit 0
+          fi
+          cargo fmt --all
+          git diff --binary -- crates > ci-logs/format.patch
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rustfmt-results
+          path: ci-logs/
+          retention-days: 30
+
+  linux:
+    name: Linux core and CLI
+    needs: dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cargo-lock
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-core-cli
+      - name: Test core and CLI
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          cargo test --locked -p relay-core -p relay-cli --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+      - name: Check core and CLI warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked -p relay-core -p relay-cli --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+      - name: Build the CLI and run the isolated sample workflow
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked -p relay-cli 2>&1 | tee ci-logs/cli-build.log
+          python3 scripts/demo.py --binary target/debug/relaypost --output "$RUNNER_TEMP/relaypost-demo" 2>&1 | tee ci-logs/demo.log
+          cp "$RUNNER_TEMP/relaypost-demo/demo-report.json" ci-logs/demo-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-verification-logs
+          path: ci-logs/
+          retention-days: 30
+
+  macos:
+    name: macOS arm64 native application
+    needs: dependencies
+    # GitHub's standard macos-15 runner is Apple Silicon; Intel uses macos-15-intel.
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cargo-lock
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-arm64-native
+      - name: Test core and CLI on the native publication implementation
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          uname -a | tee ci-logs/platform.log
+          cargo test --locked -p relay-core -p relay-cli --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+      - name: Build the CLI and native application
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked --workspace --release 2>&1 | tee ci-logs/build.log
+      - name: Check native application warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked -p relay-desktop --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+      - name: Exercise the release CLI with isolated synthetic profiles
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/demo.py --binary target/release/relaypost --output "$RUNNER_TEMP/relaypost-demo" 2>&1 | tee ci-logs/demo.log
+          cp "$RUNNER_TEMP/relaypost-demo/demo-report.json" ci-logs/demo-report.json
+      - name: Package unsigned native application
+        shell: bash
+        run: scripts/package-macos.sh target/release dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relaypost-macos-arm64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-verification-logs
+          path: ci-logs/
+          retention-days: 30
