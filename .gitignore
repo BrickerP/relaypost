@@ -8,4 +8,5 @@
 *.sqlite-wal
 .DS_Store
 /artifacts/
+__pycache__/
 

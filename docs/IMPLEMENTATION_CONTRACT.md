@@ -31,10 +31,11 @@ profile.export_receipt(parcel_id: &str, carrier: &Path) -> Result<PathBuf>
 profile.import_receipt(receipt: &Path) -> Result<ParcelRecord>
 profile.deliveries() -> Result<Vec<ParcelRecord>>
 profile.recover(password: &str) -> Result<RecoverySummary>
+profile.discard_incomplete_receives() -> Result<usize>
 profile.cancel(parcel_id: &str) -> Result<()>
 ```
 
-Profile::open may create the isolated app home and state database but must not create keys. initialize refuses an existing identity. import_contact verifies the self-signed binding and stores an unverified contact; trust_contact pins its complete fingerprint. Both sender and recipient need to trust one another before exchange.
+Profile::open may create the isolated app home and state database but must not create keys. initialize refuses an existing identity. import_contact verifies the self-signed binding and stores an unverified contact; trust_contact pins its complete fingerprint. Both sender and recipient need to trust one another before exchange. Self-card import/trust and self-addressed parcels are refused.
 
 Public data fields:
 
@@ -47,7 +48,8 @@ DeliveryState = Ready | WaitingReceipt | SavedReceiptReady | Confirmed | Failed 
 ParcelRecord { parcel_id:String, direction:Direction, state:DeliveryState,
                sender:String, recipient:String, files:usize, total_bytes:u64,
                parcel_path:Option<PathBuf>, received_path:Option<PathBuf>,
-               receipt_path:Option<PathBuf>, created_at:String, updated_at:String }
+               receipt_path:Option<PathBuf>, local_error:Option<String>,
+               created_at:String, updated_at:String }
 GroupInspection { index:usize, data_shards:usize, parity_shards:usize,
                   valid_shards:usize, missing_shards:Vec<usize>, recoverable:bool }
 Inspection { parcel_id:String, sender:String, recipient:String,
@@ -70,12 +72,23 @@ Export these types at crate root. Fingerprints are full stable fingerprints of t
 - Receiver commit authority is verified published content/metadata, with SQLite as its index. Recover crashes between publication, index and receipt. Never automatically sign success for externally changed content.
 - Receipt binds kind/schema, parcel_id, envelope digest, committed manifest digest and recipient signing identity. Only pinned expected key can confirm outgoing delivery. No success receipt on unrecoverable/tampered input.
 - Cancel stops local re-export only, never recalls exported copies or deletes source files.
+- Outgoing state preserves its delivery phase. Local retained-copy damage is stored in optional `local_error`, cleared when its bytes verify again. It never turns `WaitingReceipt` into `Ready` or overrides signed confirmation/cancellation. `Failed` remains an incoming content-conflict state.
+- Carrier receipts contain exactly receipt JSON/signature. Local acknowledgment artifacts contain those two files plus the exact authenticated original envelope JSON/signature. Recover verifies acknowledgments independently of local shards before reconciling outbox health. No receipt-only local-acknowledgment fallback is accepted.
+- Recover verifies prepared receive stages before exclusive publication, cleans superseded staging only after matching the verified final batch, and keeps partial/conflicting work pending. Explicit discard removes only owned `inbox/.staging/batch-*` receive directories under the profile lock and syncs the staging parent. It does not affect committed batches or source files.
+- Reject special file metadata before opening carrier records; Unix reads use nonblocking/no-follow flags plus descriptor type validation so FIFO input cannot hold the profile lock indefinitely.
 
 ## Interface behavior
 
+The guided onboarding/demo extension has one shared `DemoSession` engine in
+`relay-core`, reused by noninteractive CLI and staged desktop actions. Its exact
+public DTO, four phases, isolation and evidence requirements are defined in
+[the used Kiro specification](../.kiro/specs/guided-demo/design.md). Every demo
+run uses a fresh private root, synthetic profiles and real production APIs.
+The JSON report is an unsigned evidence summary; the return receipt is signed.
+
 Use English UI and help, 4 screens: Send, Receive, History, Identity & Contacts. Show real group health and outcomes, no fake progress/results. Keep expensive work off the UI thread.
 
-CLI shape: global --home; identity init/export, contacts import/trust/list, seal --to, export --carrier, inspect, receive, receipt export/import, deliveries, recover, cancel. Password through masked interactive input, --password-stdin, or a password file; never a plaintext password argument. Structured --json output must not contain secrets.
+CLI shape: global --home; identity init/export, contacts import/trust/list, seal --to, export --carrier, inspect, receive, receipt export/import, deliveries, recover, cancel. `recover --discard-incomplete` performs only explicit staging discard and prints `discarded_staging`; no password is needed. Desktop discard requires a confirmation dialog. History selections use `(parcel_id, direction)` and show local-copy health separately. Password through masked interactive input, --password-stdin, or a password file; never a plaintext password argument. Structured --json output must not contain secrets.
 
 ## Verification
 

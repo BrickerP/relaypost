@@ -1,0 +1,1737 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "accesskit",
+      "version": "0.17.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "31aa79387f27e730e33d871925e152e35e428031"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "kind": "upstream_notice",
+          "upstream_path": "LICENSE.chromium",
+          "git_blob": "a32e00ce6be3620adca152e53734f7de8fda38cf"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit-geometry.rs.txt",
+          "sha256": "cb908f6fee8d90f44979b32715de36c1694c6d091fae167ce567631a0b958501",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/common/src/geometry.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "common/src/geometry.rs",
+          "source_lines": "1-10",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "a7cd1f2807af44c1e3323561d1752475fd04e55a"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit-lib.rs.txt",
+          "sha256": "39e7c03e4e604262cb89b837faa1b50a4cede98164db77787210fb9a865b2b01",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/common/src/lib.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "common/src/lib.rs",
+          "source_lines": "1-9",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "b630f21a877b054db1fb6c7b73b0f876d854c638"
+        }
+      ],
+      "upstream_commit": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
+      "upstream_repository": "https://github.com/AccessKit/accesskit",
+      "upstream_path": "common",
+      "crate_archive_url": "https://crates.io/api/v1/crates/accesskit/0.17.1/download",
+      "crate_sha256": "d3d3b8f9bae46a948369bc4a03e815d4ed6d616bd00de4051133a5019dc31c5a",
+      "authors": [
+        "The AccessKit contributors"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "accesskit_consumer",
+      "version": "0.26.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "31aa79387f27e730e33d871925e152e35e428031"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "kind": "upstream_notice",
+          "upstream_path": "LICENSE.chromium",
+          "git_blob": "a32e00ce6be3620adca152e53734f7de8fda38cf"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_consumer-filters.rs.txt",
+          "sha256": "3b5387d4c4b55856c2416cb6f2d03fad8c68e6dca756eecf8a684ca80543c2ad",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/consumer/src/filters.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "consumer/src/filters.rs",
+          "source_lines": "1-4",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "b8f5fec1446d3cbf597e773ff33a306dab3068f3"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_consumer-iterators.rs.txt",
+          "sha256": "39e7c03e4e604262cb89b837faa1b50a4cede98164db77787210fb9a865b2b01",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/consumer/src/iterators.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "consumer/src/iterators.rs",
+          "source_lines": "1-9",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "efef7ab8e191300fba040f1f9c7d06c297b2250a"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_consumer-lib.rs.txt",
+          "sha256": "4f4962081b527daaf69ab962c0cf657a7b4ce0fefe26bbec6ddba15267ac1a71",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/consumer/src/lib.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "consumer/src/lib.rs",
+          "source_lines": "1-4",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "5ab13d382e1d5e3d85f0aab2fd741df9c8afe77d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_consumer-node.rs.txt",
+          "sha256": "37d1e23e66a24d308ac1f7f47b07d636687b470696b7764d201e302390298ed0",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/consumer/src/node.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "consumer/src/node.rs",
+          "source_lines": "1-9",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "e7a08798c1f3b13a5fb4601165369a3e3c07e3fc"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_consumer-text.rs.txt",
+          "sha256": "fb8474da2353b6070cfa4c5b817231fe0550cede45ec1dfcae494bac7ea0e56e",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/consumer/src/text.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "consumer/src/text.rs",
+          "source_lines": "1-4",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "0404ad0a8d139491ced8418e183eac6b52c64e96"
+        }
+      ],
+      "upstream_commit": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
+      "upstream_repository": "https://github.com/AccessKit/accesskit",
+      "upstream_path": "consumer",
+      "crate_archive_url": "https://crates.io/api/v1/crates/accesskit_consumer/0.26.0/download",
+      "crate_sha256": "f47983a1084940ba9a39c077a8c63e55c619388be5476ac04c804cfbd1e63459",
+      "authors": [
+        "The AccessKit contributors"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "accesskit_macos",
+      "version": "0.18.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "31aa79387f27e730e33d871925e152e35e428031"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "kind": "upstream_notice",
+          "upstream_path": "LICENSE.chromium",
+          "git_blob": "a32e00ce6be3620adca152e53734f7de8fda38cf"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_macos-adapter.rs.txt",
+          "sha256": "fb8474da2353b6070cfa4c5b817231fe0550cede45ec1dfcae494bac7ea0e56e",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/platforms/macos/src/adapter.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "platforms/macos/src/adapter.rs",
+          "source_lines": "1-4",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "2bd942bb8002c9d3ebcbf1c5d94a957ebb3b922d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_macos-filters.rs.txt",
+          "sha256": "3b5387d4c4b55856c2416cb6f2d03fad8c68e6dca756eecf8a684ca80543c2ad",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/platforms/macos/src/filters.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "platforms/macos/src/filters.rs",
+          "source_lines": "1-4",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "2802d57e64d170d2d78937dec1493a84a5957f85"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_macos-node.rs.txt",
+          "sha256": "e5d5f3bf49016cd81474090cab638534295fbd9a30ef2b2b973f184ea420489d",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/platforms/macos/src/node.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "platforms/macos/src/node.rs",
+          "source_lines": "1-9",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "631e63dfc9288729f1a0645a8ad482dadbf219cc"
+        }
+      ],
+      "upstream_commit": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
+      "upstream_repository": "https://github.com/AccessKit/accesskit",
+      "upstream_path": "platforms/macos",
+      "crate_archive_url": "https://crates.io/api/v1/crates/accesskit_macos/0.18.1/download",
+      "crate_sha256": "7329821f3bd1101e03a7d2e03bd339e3ac0dc64c70b4c9f9ae1949e3ba8dece1",
+      "authors": [
+        "The AccessKit contributors"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "accesskit_winit",
+      "version": "0.23.1",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "31aa79387f27e730e33d871925e152e35e428031"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "sha256": "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE.chromium",
+          "kind": "upstream_notice",
+          "upstream_path": "LICENSE.chromium",
+          "git_blob": "a32e00ce6be3620adca152e53734f7de8fda38cf"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_winit-lib.rs.txt",
+          "sha256": "8f66c779519de460932950fc3240883b3d5dace439d9c024f05e7b1d5f9e46fd",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/platforms/winit/src/lib.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "platforms/winit/src/lib.rs",
+          "source_lines": "1-3",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "dea029bff5eeb5be815c69f107c86ac1ca90ecd5"
+        },
+        {
+          "path": "licenses/AccessKit-accesskit-405d578cdfd8496ee79020d24cfaac8c29a8a48f/source-notices/accesskit_winit-mod.rs.txt",
+          "sha256": "6a2adb24d52444512b51086bb28915d404b86ead429214aaebd5be5722ec5363",
+          "source_url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/platforms/winit/src/platform_impl/mod.rs",
+          "kind": "upstream_notice",
+          "upstream_path": "platforms/winit/src/platform_impl/mod.rs",
+          "source_lines": "1-5",
+          "extraction": "Verbatim initial copyright and license comments; Rust comment markers retained.",
+          "git_blob": "76197cbdc7a8d1f22006aeb448ff071d014db31c"
+        }
+      ],
+      "upstream_commit": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
+      "upstream_repository": "https://github.com/AccessKit/accesskit",
+      "upstream_path": "platforms/winit",
+      "crate_archive_url": "https://crates.io/api/v1/crates/accesskit_winit/0.23.1/download",
+      "crate_sha256": "6a6a48dad5530b6deb9fc7a52cc6c3bf72cdd9eb8157ac9d32d69f2427a5e879",
+      "authors": [
+        "The AccessKit contributors"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "age",
+      "version": "0.11.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/str4d-rage-07808823074013acab5417de9d6ad176133312c6/LICENSE-APACHE",
+          "sha256": "3708458dee7f359ac6c9c5558023ed481be87e5372c43ebd7f2ca7ad23c12026",
+          "source_url": "https://raw.githubusercontent.com/str4d/rage/07808823074013acab5417de9d6ad176133312c6/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1e5006dc141e22213c898c27abaded8d936c32f0"
+        },
+        {
+          "path": "licenses/str4d-rage-07808823074013acab5417de9d6ad176133312c6/LICENSE-MIT",
+          "sha256": "fe56c030c2d8c3404a37fe711cebb27ebea13d0aacf7e3524db4198335ad8cd1",
+          "source_url": "https://raw.githubusercontent.com/str4d/rage/07808823074013acab5417de9d6ad176133312c6/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "c775f6102aead463c9d606fd34d47a3c2218148f"
+        }
+      ],
+      "upstream_commit": "07808823074013acab5417de9d6ad176133312c6",
+      "upstream_repository": "https://github.com/str4d/rage",
+      "upstream_path": "age",
+      "crate_archive_url": "https://crates.io/api/v1/crates/age/0.11.1/download",
+      "crate_sha256": "57fc171f4874fa10887e47088f81a55fcf030cd421aa31ec2b370cafebcc608a",
+      "authors": [
+        "Jack Grigg <thestr4d@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "age-core",
+      "version": "0.11.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/str4d-rage-17446612f865c705e44fe392d9d41dd102fed137/LICENSE-APACHE",
+          "sha256": "3708458dee7f359ac6c9c5558023ed481be87e5372c43ebd7f2ca7ad23c12026",
+          "source_url": "https://raw.githubusercontent.com/str4d/rage/17446612f865c705e44fe392d9d41dd102fed137/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "1e5006dc141e22213c898c27abaded8d936c32f0"
+        },
+        {
+          "path": "licenses/str4d-rage-17446612f865c705e44fe392d9d41dd102fed137/LICENSE-MIT",
+          "sha256": "fe56c030c2d8c3404a37fe711cebb27ebea13d0aacf7e3524db4198335ad8cd1",
+          "source_url": "https://raw.githubusercontent.com/str4d/rage/17446612f865c705e44fe392d9d41dd102fed137/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "c775f6102aead463c9d606fd34d47a3c2218148f"
+        }
+      ],
+      "upstream_commit": "17446612f865c705e44fe392d9d41dd102fed137",
+      "upstream_repository": "https://github.com/str4d/rage",
+      "upstream_path": "age-core",
+      "crate_archive_url": "https://crates.io/api/v1/crates/age-core/0.11.0/download",
+      "crate_sha256": "e2bf6a89c984ca9d850913ece2da39e1d200563b0a94b002b253beee4c5acf99",
+      "authors": [
+        "Jack Grigg <thestr4d@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "bech32",
+      "version": "0.9.1",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/rust-bitcoin-rust-bech32-d12513f1e3768a7f2a2e1b4d650139eb92a4ae9b/MIT-source-header.txt",
+          "sha256": "74375f18b087dc11b0d356d423601acf4bcfc2bc86ac95dc72336d362f869f0d",
+          "source_url": "https://raw.githubusercontent.com/rust-bitcoin/rust-bech32/d12513f1e3768a7f2a2e1b4d650139eb92a4ae9b/src/lib.rs",
+          "kind": "upstream_license",
+          "upstream_path": "src/lib.rs",
+          "source_lines": "1-19",
+          "extraction": "Verbatim initial comment block; Rust comment markers retained."
+        }
+      ],
+      "upstream_commit": "d12513f1e3768a7f2a2e1b4d650139eb92a4ae9b",
+      "upstream_repository": "https://github.com/rust-bitcoin/rust-bech32",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/bech32/0.9.1/download",
+      "crate_sha256": "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445",
+      "authors": [
+        "Clark Moody"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "block",
+      "version": "0.1.6",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/SSheldon-rust-block-47178790cfc9d4a8b092051d8b413b78bd31254a/UPSTREAM-LICENSE-DECLARATION.txt",
+          "sha256": "e5c88abbd7979801613a81be6755452670089a7b39f6e92a25d7d76a61d30ea0",
+          "source_url": "https://raw.githubusercontent.com/SSheldon/rust-block/47178790cfc9d4a8b092051d8b413b78bd31254a/Cargo.toml",
+          "kind": "upstream_declaration",
+          "upstream_path": "Cargo.toml",
+          "source_lines": "1-20",
+          "extraction": "Verbatim upstream declaration; no copyright attribution added."
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "47178790cfc9d4a8b092051d8b413b78bd31254a",
+      "upstream_repository": "https://github.com/SSheldon/rust-block",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/block/0.1.6/download",
+      "crate_sha256": "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a",
+      "authors": [
+        "Steven Sheldon"
+      ],
+      "commit_evidence": "release-tag-and-package-content-match",
+      "selected_license": "MIT",
+      "provenance_note": "Upstream declares the selected SPDX license but supplies no standalone license text or explicit copyright notice in the published crate or checked source tree. Canonical license terms are identified separately. Any copyright placeholders in the canonical text are template markers, not asserted copyright attribution.",
+      "verified_published_paths": [
+        "Cargo.toml",
+        "README.md",
+        "src/lib.rs",
+        "src/test_utils.rs"
+      ]
+    },
+    {
+      "name": "block2",
+      "version": "0.5.1",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "4fc083f1c6d6784577e38b0ee8dbd344481e2fd2",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/block2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/block2/0.5.1/download",
+      "crate_sha256": "2c132eebf10f5cad5289222520a4a058514204aed6d791f1cf4fe8088b82d15f",
+      "authors": [
+        "Steven Sheldon",
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "block2",
+      "version": "0.6.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "b4167b582b2f75f9a1be75495c41b765344fd03c",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/block2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/block2/0.6.2/download",
+      "crate_sha256": "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "MIT",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "codespan-reporting",
+      "version": "0.11.1",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/brendanzab-codespan-fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "source_url": "https://raw.githubusercontent.com/brendanzab/codespan/fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE",
+          "git_blob": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+        }
+      ],
+      "upstream_commit": "fd389a13f5bb6d625b71e2e4694b26e127f393f9",
+      "upstream_repository": "https://github.com/brendanzab/codespan",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/codespan-reporting/0.11.1/download",
+      "crate_sha256": "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e",
+      "authors": [
+        "Brendan Zabarauskas <bjzaba@yahoo.com.au>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "cookie-factory",
+      "version": "0.3.3",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/rust-bakery-cookie-factory-d36b805dbd7dd65f2df947235c5bcc573afe2c76/LICENSES/MIT.txt",
+          "sha256": "d09216dc1ea5f273997667935a8d6514d80f00b89fb6954ecc3a43e0a6e360de",
+          "source_url": "https://raw.githubusercontent.com/rust-bakery/cookie-factory/d36b805dbd7dd65f2df947235c5bcc573afe2c76/LICENSES/MIT.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSES/MIT.txt",
+          "git_blob": "d9e66dc90589bbf32cdf66d1431c03434d65bdf3"
+        }
+      ],
+      "upstream_commit": "d36b805dbd7dd65f2df947235c5bcc573afe2c76",
+      "upstream_repository": "https://github.com/rust-bakery/cookie-factory",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/cookie-factory/0.3.3/download",
+      "crate_sha256": "9885fa71e26b8ab7855e2ec7cae6e9b380edff76cd052e07c683a0319d51b3a2",
+      "authors": [
+        "Geoffroy Couprie <geo.couprie@gmail.com>",
+        "Pierre Chifflier <chifflier@wzdftpd.net>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "dispatch",
+      "version": "0.2.0",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/SSheldon-rust-dispatch-82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748/UPSTREAM-LICENSE-DECLARATION.txt",
+          "sha256": "05c60b829931ef7f1f130735843c11f5cf9cc69546eca5fc941d014781c68e31",
+          "source_url": "https://raw.githubusercontent.com/SSheldon/rust-dispatch/82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748/Cargo.toml",
+          "kind": "upstream_declaration",
+          "upstream_path": "Cargo.toml",
+          "source_lines": "1-20",
+          "extraction": "Verbatim upstream declaration; no copyright attribution added."
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "82d6c7a5b75dc0c71c3f46f87bb6c16a476f7748",
+      "upstream_repository": "https://github.com/SSheldon/rust-dispatch",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/dispatch/0.2.0/download",
+      "crate_sha256": "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b",
+      "authors": [
+        "Steven Sheldon"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "MIT",
+      "provenance_note": "Upstream declares the selected SPDX license but supplies no standalone license text or explicit copyright notice in the published crate or checked source tree. Canonical license terms are identified separately. Any copyright placeholders in the canonical text are template markers, not asserted copyright attribution."
+    },
+    {
+      "name": "dispatch2",
+      "version": "0.2.0",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/dispatch2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/dispatch2/0.2.0/download",
+      "crate_sha256": "1a0d569e003ff27784e0e14e4a594048698e0c0f0b66cabcb51511be55a7caa0",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>",
+        "Mary <mary@mary.zone>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "8852b424193ca41602281b3d7540d7c8ed51e49a",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/dispatch2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/dispatch2/0.3.1/download",
+      "crate_sha256": "1e0e367e4e7da84520dedcac1901e4da967309406d1e51017ae1abfb97adbd38",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>",
+        "Mary <mary@mary.zone>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "ecolor",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/ecolor",
+      "crate_archive_url": "https://crates.io/api/v1/crates/ecolor/0.31.1/download",
+      "crate_sha256": "bc4feb366740ded31a004a0e4452fbf84e80ef432ecf8314c485210229672fd1",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>",
+        "Andreas Reich <reichandreas@gmx.de>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "eframe",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/eframe",
+      "crate_archive_url": "https://crates.io/api/v1/crates/eframe/0.31.1/download",
+      "crate_sha256": "d0dfe0859f3fb1bc6424c57d41e10e9093fe938f426b691e42272c2f336d915c",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "egui",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/egui",
+      "crate_archive_url": "https://crates.io/api/v1/crates/egui/0.31.1/download",
+      "crate_sha256": "25dd34cec49ab55d85ebf70139cb1ccd29c977ef6b6ba4fe85489d6877ee9ef3",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "egui-wgpu",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/egui-wgpu",
+      "crate_archive_url": "https://crates.io/api/v1/crates/egui-wgpu/0.31.1/download",
+      "crate_sha256": "d319dfef570f699b6e9114e235e862a2ddcf75f0d1a061de9e1328d92146d820",
+      "authors": [
+        "Nils Hasenbanck <nils@hasenbanck.de>",
+        "embotech <opensource@embotech.com>",
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "egui-winit",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/egui-winit",
+      "crate_archive_url": "https://crates.io/api/v1/crates/egui-winit/0.31.1/download",
+      "crate_sha256": "7d9dfbb78fe4eb9c3a39ad528b90ee5915c252e77bbab9d4ebc576541ab67e13",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "egui_glow",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/egui_glow",
+      "crate_archive_url": "https://crates.io/api/v1/crates/egui_glow/0.31.1/download",
+      "crate_sha256": "910906e3f042ea6d2378ec12a6fd07698e14ddae68aed2d819ffe944a73aab9e",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "emath",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/emath",
+      "crate_archive_url": "https://crates.io/api/v1/crates/emath/0.31.1/download",
+      "crate_sha256": "9e4cadcff7a5353ba72b7fea76bf2122b5ebdbc68e8155aa56dfdea90083fe1b",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "epaint",
+      "version": "0.31.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/epaint",
+      "crate_archive_url": "https://crates.io/api/v1/crates/epaint/0.31.1/download",
+      "crate_sha256": "41fcc0f5a7c613afd2dee5e4b30c3e6acafb8ad6f0edb06068811f708a67c562",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "epaint_default_fonts",
+      "version": "0.31.1",
+      "license": "(MIT OR Apache-2.0) AND OFL-1.1 AND Ubuntu-font-1.0",
+      "files": [
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "11069edd79019f7dafbe3138841cf289209270dd"
+        },
+        {
+          "path": "licenses/emilk-egui-1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+          "source_url": "https://raw.githubusercontent.com/emilk/egui/1669e52a7ccfc3489c1b0999b9ed48894a0b3887/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "673ea5f0505d6fa65c6a2b6a753c93b8e19d11b9"
+        }
+      ],
+      "upstream_commit": "1669e52a7ccfc3489c1b0999b9ed48894a0b3887",
+      "upstream_repository": "https://github.com/emilk/egui",
+      "upstream_path": "crates/epaint_default_fonts",
+      "crate_archive_url": "https://crates.io/api/v1/crates/epaint_default_fonts/0.31.1/download",
+      "crate_sha256": "fc7e7a64c02cf7a5b51e745a9e45f60660a286f151c238b9d397b3e923f5082f",
+      "authors": [
+        "Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "fluent-langneg",
+      "version": "0.13.1",
+      "license": "Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/projectfluent-fluent-langneg-rs-7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+          "source_url": "https://raw.githubusercontent.com/projectfluent/fluent-langneg-rs/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "8dada3edaf50dbc082c9a125058f25def75e625a"
+        },
+        {
+          "path": "licenses/projectfluent-fluent-langneg-rs-7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT",
+          "sha256": "016fcc02048817d628b04b140c54db290fd9d29a5e8a55b77871194e810716ac",
+          "source_url": "https://raw.githubusercontent.com/projectfluent/fluent-langneg-rs/7fdc590466ea63ca2367ac10fb1b881fe561f1a8/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "00ec7a238dcd2fb765a6abc64ae43d80f0514140"
+        }
+      ],
+      "upstream_commit": "7fdc590466ea63ca2367ac10fb1b881fe561f1a8",
+      "upstream_repository": "https://github.com/projectfluent/fluent-langneg-rs",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/fluent-langneg/0.13.1/download",
+      "crate_sha256": "7eebbe59450baee8282d71676f3bfed5689aeab00b27545e83e5f14b1195e8b0",
+      "authors": [
+        "Zibi Braniecki <gandalf@mozilla.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "gpu-alloc",
+      "version": "0.6.2",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/zakarumych-gpu-alloc-61020bdcb4eb04fca6bbf748aeb9570e859236e0/COPYING",
+          "sha256": "12121dfa588677007848ab922a45a1e3248868f6ff063598fceb3141d7897314",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/COPYING",
+          "kind": "upstream_license",
+          "upstream_path": "COPYING",
+          "git_blob": "1787983c037783b8855a688f5d9c0b6a2ec30b40"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-alloc-61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/APACHE",
+          "sha256": "58317934bf818c379e4215fad7e8dfb6812edff32c9557b8b039343f69711e08",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "license/APACHE",
+          "git_blob": "690245e2787c89e4332ff4c674112bea22dc41e3"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-alloc-61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/MIT",
+          "sha256": "f774bf68151714985324d90adbd59e8f271b7ba518608d871b6ba16464692879",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/MIT",
+          "kind": "upstream_license",
+          "upstream_path": "license/MIT",
+          "git_blob": "3746e3bb20fc30b6f07688c561b87ee1eb7a439d"
+        }
+      ],
+      "upstream_commit": "61020bdcb4eb04fca6bbf748aeb9570e859236e0",
+      "upstream_repository": "https://github.com/zakarumych/gpu-alloc",
+      "upstream_path": "gpu-alloc",
+      "crate_archive_url": "https://crates.io/api/v1/crates/gpu-alloc/0.6.2/download",
+      "crate_sha256": "45cf04b2726f02df5508c6de726acdc90cdf97ac771a9a0ffd8ba10a6e696bf9",
+      "authors": [
+        "Zakarum <roman@barykin.me>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "gpu-alloc-types",
+      "version": "0.3.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/zakarumych-gpu-alloc-7ddd1fe576fcfc503347eb97e476a47581479f22/COPYING",
+          "sha256": "12121dfa588677007848ab922a45a1e3248868f6ff063598fceb3141d7897314",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/COPYING",
+          "kind": "upstream_license",
+          "upstream_path": "COPYING",
+          "git_blob": "1787983c037783b8855a688f5d9c0b6a2ec30b40"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-alloc-7ddd1fe576fcfc503347eb97e476a47581479f22/license/APACHE",
+          "sha256": "58317934bf818c379e4215fad7e8dfb6812edff32c9557b8b039343f69711e08",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/license/APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "license/APACHE",
+          "git_blob": "690245e2787c89e4332ff4c674112bea22dc41e3"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-alloc-7ddd1fe576fcfc503347eb97e476a47581479f22/license/MIT",
+          "sha256": "f774bf68151714985324d90adbd59e8f271b7ba518608d871b6ba16464692879",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/license/MIT",
+          "kind": "upstream_license",
+          "upstream_path": "license/MIT",
+          "git_blob": "3746e3bb20fc30b6f07688c561b87ee1eb7a439d"
+        }
+      ],
+      "upstream_commit": "7ddd1fe576fcfc503347eb97e476a47581479f22",
+      "upstream_repository": "https://github.com/zakarumych/gpu-alloc",
+      "upstream_path": "types",
+      "crate_archive_url": "https://crates.io/api/v1/crates/gpu-alloc-types/0.3.1/download",
+      "crate_sha256": "b2bbed164dd10ed526c2e4fe3e721ca4a71c61730e5aafac6844b417b3227058",
+      "authors": [
+        "Zakarum <roman@barykin.me>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "gpu-descriptor",
+      "version": "0.3.2",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/COPYING",
+          "sha256": "f72143f7e9d9fb8bd336b139fa22f825a299591c29f2f7338c5566347b137613",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/COPYING",
+          "kind": "upstream_license",
+          "upstream_path": "COPYING",
+          "git_blob": "9eca5fed017db6917cc476f67dcff36b0364bd48"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/APACHE",
+          "sha256": "6bec8c944a6d4251be50ac86bb4ca360bcce5aea472505dee2800e160bf1cdbf",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "license/APACHE",
+          "git_blob": "cfaf4615fc4eafe17df4df25b135ae82a73f142d"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/MIT",
+          "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/MIT",
+          "kind": "upstream_license",
+          "upstream_path": "license/MIT",
+          "git_blob": "6fb305333b5577c09ea210cdf2e1fcf6793e9b01"
+        }
+      ],
+      "upstream_commit": "bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a",
+      "upstream_repository": "https://github.com/zakarumych/gpu-descriptor",
+      "upstream_path": "gpu-descriptor",
+      "crate_archive_url": "https://crates.io/api/v1/crates/gpu-descriptor/0.3.2/download",
+      "crate_sha256": "b89c83349105e3732062a895becfc71a8f921bb71ecbbdd8ff99263e3b53a0ca",
+      "authors": [
+        "Zakarum <zakarumych@ya.ru>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "gpu-descriptor-types",
+      "version": "0.2.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-9f2fb9546591322e7b77ee1e79385e01effd85e4/COPYING",
+          "sha256": "f72143f7e9d9fb8bd336b139fa22f825a299591c29f2f7338c5566347b137613",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/COPYING",
+          "kind": "upstream_license",
+          "upstream_path": "COPYING",
+          "git_blob": "9eca5fed017db6917cc476f67dcff36b0364bd48"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-9f2fb9546591322e7b77ee1e79385e01effd85e4/license/APACHE",
+          "sha256": "6bec8c944a6d4251be50ac86bb4ca360bcce5aea472505dee2800e160bf1cdbf",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/license/APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "license/APACHE",
+          "git_blob": "cfaf4615fc4eafe17df4df25b135ae82a73f142d"
+        },
+        {
+          "path": "licenses/zakarumych-gpu-descriptor-9f2fb9546591322e7b77ee1e79385e01effd85e4/license/MIT",
+          "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
+          "source_url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/license/MIT",
+          "kind": "upstream_license",
+          "upstream_path": "license/MIT",
+          "git_blob": "6fb305333b5577c09ea210cdf2e1fcf6793e9b01"
+        }
+      ],
+      "upstream_commit": "9f2fb9546591322e7b77ee1e79385e01effd85e4",
+      "upstream_repository": "https://github.com/zakarumych/gpu-descriptor",
+      "upstream_path": "types",
+      "crate_archive_url": "https://crates.io/api/v1/crates/gpu-descriptor-types/0.2.0/download",
+      "crate_sha256": "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91",
+      "authors": [
+        "Zakarum <zakarumych@ya.ru>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "hexf-parse",
+      "version": "0.2.1",
+      "license": "CC0-1.0",
+      "files": [
+        {
+          "path": "licenses/lifthrasiir-hexf-4225763d744183d720f575ae96d04161b4d08ea0/UPSTREAM-LICENSE-DECLARATION.txt",
+          "sha256": "4a56dbdbc12054fd33b7a2634a45cbbe6fe12f5e6f4081002cbfa527f7220c70",
+          "source_url": "https://raw.githubusercontent.com/lifthrasiir/hexf/4225763d744183d720f575ae96d04161b4d08ea0/parse/Cargo.toml",
+          "kind": "upstream_declaration",
+          "upstream_path": "parse/Cargo.toml",
+          "source_lines": "1-11",
+          "extraction": "Verbatim upstream package declaration; no copyright attribution added."
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/CC0-1.0.txt",
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/CC0-1.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "4225763d744183d720f575ae96d04161b4d08ea0",
+      "upstream_repository": "https://github.com/lifthrasiir/hexf",
+      "upstream_path": "parse",
+      "crate_archive_url": "https://crates.io/api/v1/crates/hexf-parse/0.2.1/download",
+      "crate_sha256": "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df",
+      "authors": [
+        "Kang Seonghoon <public+rust@mearie.org>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info-and-published-subdirectory-content-match",
+      "selected_license": "CC0-1.0",
+      "provenance_note": "Upstream declares the selected SPDX license but supplies no standalone license text or explicit copyright notice in the published crate or checked source tree. Canonical license terms are identified separately. Any copyright placeholders in the canonical text are template markers, not asserted copyright attribution.",
+      "verified_published_paths": [
+        "Cargo.toml.orig -> parse/Cargo.toml",
+        "src/lib.rs -> parse/src/lib.rs"
+      ]
+    },
+    {
+      "name": "intl_pluralrules",
+      "version": "7.0.2",
+      "license": "Apache-2.0/MIT",
+      "files": [
+        {
+          "path": "licenses/zbraniecki-pluralrules-d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+          "source_url": "https://raw.githubusercontent.com/zbraniecki/pluralrules/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "intl_pluralrules/LICENSE-APACHE",
+          "git_blob": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d"
+        },
+        {
+          "path": "licenses/zbraniecki-pluralrules-d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+          "source_url": "https://raw.githubusercontent.com/zbraniecki/pluralrules/d0715d5b7cca72e228d6e6c4de154bd30dfdd06a/intl_pluralrules/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "intl_pluralrules/LICENSE-MIT",
+          "git_blob": "31aa79387f27e730e33d871925e152e35e428031"
+        }
+      ],
+      "upstream_commit": "d0715d5b7cca72e228d6e6c4de154bd30dfdd06a",
+      "upstream_repository": "https://github.com/zbraniecki/pluralrules",
+      "upstream_path": "intl_pluralrules",
+      "crate_archive_url": "https://crates.io/api/v1/crates/intl_pluralrules/7.0.2/download",
+      "crate_sha256": "078ea7b7c29a2b4df841a7f6ac8775ff6074020c6776d48491ce2268e068f972",
+      "authors": [
+        "Kekoa Riggin <kekoariggin@gmail.com>",
+        "Zibi Braniecki <zbraniecki@mozilla.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "io_tee",
+      "version": "0.1.1",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/TheOnlyMrCat-io_tee-8a7adecebf3429cbc58a0368751d1851dfaf58ed/UPSTREAM-LICENSE-DECLARATION.txt",
+          "sha256": "9de286725450e7036d60c1afd456252280d5c444b2554fb05f66afb93af81387",
+          "source_url": "https://raw.githubusercontent.com/TheOnlyMrCat/io_tee/8a7adecebf3429cbc58a0368751d1851dfaf58ed/README.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "README.md",
+          "source_lines": "11-19",
+          "extraction": "Verbatim upstream declaration; no copyright attribution added."
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "8a7adecebf3429cbc58a0368751d1851dfaf58ed",
+      "upstream_repository": "https://github.com/TheOnlyMrCat/io_tee",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/io_tee/0.1.1/download",
+      "crate_sha256": "4b3f7cef34251886990511df1c61443aa928499d598a9473929ab5a90a527304",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "Upstream declares the selected SPDX license but supplies no standalone license text or explicit copyright notice in the published crate or checked source tree. Canonical license terms are identified separately. Any copyright placeholders in the canonical text are template markers, not asserted copyright attribution."
+    },
+    {
+      "name": "malloc_buf",
+      "version": "0.0.6",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/SSheldon-malloc_buf-230861bf873ec72a644ae5a1b39fdf0b3a1ce654/UPSTREAM-LICENSE-DECLARATION.txt",
+          "sha256": "dbdcbd038e4f1ede526762b249ca64617dad84769f2bf1687df7a50a47ba0db7",
+          "source_url": "https://raw.githubusercontent.com/SSheldon/malloc_buf/230861bf873ec72a644ae5a1b39fdf0b3a1ce654/Cargo.toml",
+          "kind": "upstream_declaration",
+          "upstream_path": "Cargo.toml",
+          "source_lines": "1-12",
+          "extraction": "Verbatim upstream declaration; no copyright attribution added."
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "230861bf873ec72a644ae5a1b39fdf0b3a1ce654",
+      "upstream_repository": "https://github.com/SSheldon/malloc_buf",
+      "upstream_path": "",
+      "crate_archive_url": "https://crates.io/api/v1/crates/malloc_buf/0.0.6/download",
+      "crate_sha256": "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb",
+      "authors": [
+        "Steven Sheldon"
+      ],
+      "commit_evidence": "publication-commit-and-package-content-match",
+      "selected_license": "MIT",
+      "provenance_note": "Upstream declares the selected SPDX license but supplies no standalone license text or explicit copyright notice in the published crate or checked source tree. Canonical license terms are identified separately. Any copyright placeholders in the canonical text are template markers, not asserted copyright attribution.",
+      "verified_published_paths": [
+        "Cargo.toml",
+        "src/lib.rs"
+      ]
+    },
+    {
+      "name": "naga",
+      "version": "24.0.0",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/gfx-rs-wgpu-dc1e50e08cd4a5c8d6c3e8a180e93535d40bec4a/LICENSE.APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+          "source_url": "https://raw.githubusercontent.com/gfx-rs/wgpu/dc1e50e08cd4a5c8d6c3e8a180e93535d40bec4a/LICENSE.APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.APACHE",
+          "git_blob": "d9a10c0d8e868ebf8da0b3dc95bb0be634c34bfe"
+        },
+        {
+          "path": "licenses/gfx-rs-wgpu-dc1e50e08cd4a5c8d6c3e8a180e93535d40bec4a/LICENSE.MIT",
+          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4",
+          "source_url": "https://raw.githubusercontent.com/gfx-rs/wgpu/dc1e50e08cd4a5c8d6c3e8a180e93535d40bec4a/LICENSE.MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.MIT",
+          "git_blob": "4699691b8ed37738afcbcd591c91f7759472c3d0"
+        }
+      ],
+      "upstream_commit": "dc1e50e08cd4a5c8d6c3e8a180e93535d40bec4a",
+      "upstream_repository": "https://github.com/gfx-rs/wgpu",
+      "upstream_path": "naga",
+      "crate_archive_url": "https://crates.io/api/v1/crates/naga/24.0.0/download",
+      "crate_sha256": "e380993072e52eef724eddfcde0ed013b0c023c3f0417336ed041aa9f076994e",
+      "authors": [
+        "gfx-rs developers"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc-sys",
+      "version": "0.3.5",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "4fc083f1c6d6784577e38b0ee8dbd344481e2fd2",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/objc-sys",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc-sys/0.3.5/download",
+      "crate_sha256": "cdb91bdd390c7ce1a8607f35f3ca7151b65afc0ff5ff3b34fa350f7d7c7e4310",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2",
+      "version": "0.5.3",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-5237cbf081d04ef75a1f6a207b4018e7c1ae7438/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/5237cbf081d04ef75a1f6a207b4018e7c1ae7438/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "5237cbf081d04ef75a1f6a207b4018e7c1ae7438",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/objc2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2/0.5.3/download",
+      "crate_sha256": "19d5490aaf8f1d7cf7688dfa9b0ce07900e168852c45cd2c03f534dfd27cfd0b",
+      "authors": [
+        "Steven Sheldon",
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2",
+      "version": "0.6.5",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "d7d2fa23ceaa5e6096c923b081040e5d81b3b9df",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/objc2",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2/0.6.5/download",
+      "crate_sha256": "08849bbd4767dfae9457696856ae1c84fe4e0281bbe4a7abff2d0e06fb7981f8",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "MIT",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-app-kit",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-app-kit",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-app-kit/0.2.2/download",
+      "crate_sha256": "e4e89ad9e3d7d297152b17d39ed92cd50ca8063a89a9fa569046d41568891eff",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-app-kit",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-app-kit/0.3.2/download",
+      "crate_sha256": "d49e936b501e5c5bf01fda3a9452ff86dc3ea98ad5f283e1455153142d97518c",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-core-data",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-core-data",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-core-data/0.2.2/download",
+      "crate_sha256": "617fbf49e071c178c0b24c080767db52958f716d9eabdf0890523aeae54773ef",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-core-foundation",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-core-foundation/0.3.2/download",
+      "crate_sha256": "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-core-graphics",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-core-graphics",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-core-graphics/0.3.2/download",
+      "crate_sha256": "e022c9d066895efa1345f8e33e584b9f958da2fd4cd116792e15e07e4720a807",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-core-image",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-core-image",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-core-image/0.2.2/download",
+      "crate_sha256": "55260963a527c99f1819c4f8e3b47fe04f9650694ef348ffd2227e8196d34c80",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "8d214f5477365ffcbcbb7de058c86ed9a518efb7",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "crates/objc2-encode",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-encode/4.1.0/download",
+      "crate_sha256": "ef25abbcd74fb2609453eb695bd2f860d389e457f67dc17cafc8b8cbc89d0c33",
+      "authors": [
+        "Mads Marquart <mads@marquart.dk>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "MIT",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-foundation",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-foundation",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-foundation/0.2.2/download",
+      "crate_sha256": "0ee638a5da3799329310ad4cfa62fbf045d5f56e3ef5ba4149e7452dcf89d5a8",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2-foundation",
+      "version": "0.3.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/MIT.txt",
+          "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/MIT.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-foundation",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-foundation/0.3.2/download",
+      "crate_sha256": "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "MIT",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-io-surface",
+      "version": "0.3.2",
+      "license": "Zlib OR Apache-2.0 OR MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "sha256": "7f976f7e9cb2d87df7230606feb932c3f21ac0e664045a775b600046ff850c54",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md",
+          "kind": "upstream_declaration",
+          "upstream_path": "LICENSE.md",
+          "git_blob": "540ae4c81adb5f64a9f61e222b688880da24300e"
+        },
+        {
+          "path": "licenses/standard-terms-spdx-31846481de7ea17d92f2f46fad76abe58b2e9bb0/Apache-2.0.txt",
+          "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+          "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/31846481de7ea17d92f2f46fad76abe58b2e9bb0/text/Apache-2.0.txt",
+          "kind": "canonical_license",
+          "upstream_commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0"
+        }
+      ],
+      "upstream_commit": "7b1abfd750a2cacaea71d6a56ecfb83cb7de560b",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-io-surface",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-io-surface/0.3.2/download",
+      "crate_sha256": "180788110936d59bab6bd83b6060ffdfffb3b922ba1396b312ae795e1de9d81d",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info",
+      "selected_license": "Apache-2.0",
+      "provenance_note": "The upstream LICENSE.md states the applicable licensing choices but does not contain their full terms or an explicit copyright notice. The selected standardized terms are supplied separately. Any copyright placeholders in canonical terms are template markers, not asserted attribution."
+    },
+    {
+      "name": "objc2-metal",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-metal",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-metal/0.2.2/download",
+      "crate_sha256": "dd0cba1276f6023976a406a14ffa85e1fdd19df6b0f737b063b95f6c8c7aadd6",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "objc2-quartz-core",
+      "version": "0.2.2",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "licenses/madsmtm-objc2-e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "sha256": "e353f37b12aefbb9f9b29490e837cfee05d9bda70804b3562839a3285c1df1e5",
+          "source_url": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE.txt",
+          "git_blob": "e9ab3babc0d8602b83dccde8a462f8f3dc1e52ad"
+        }
+      ],
+      "upstream_commit": "e282618be4c3a3b9542957e0c8540e9588472ce8",
+      "upstream_repository": "https://github.com/madsmtm/objc2",
+      "upstream_path": "framework-crates/objc2-quartz-core",
+      "crate_archive_url": "https://crates.io/api/v1/crates/objc2-quartz-core/0.2.2/download",
+      "crate_sha256": "e42bee7bff906b14b167da2bac5efe6b6a07e6f7c0a21a7308d40c960242dc7a",
+      "authors": [],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "profiling",
+      "version": "1.0.18",
+      "license": "MIT OR Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/aclysma-profiling-8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
+          "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551",
+          "source_url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-APACHE",
+          "git_blob": "139dce95d473c201a8561ef17536314d8b8cda65"
+        },
+        {
+          "path": "licenses/aclysma-profiling-8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT",
+          "sha256": "c8167fdeeed46d3f244d3f85c5bf998ce889343691c32be2c61a8bc4b5c08333",
+          "source_url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE-MIT",
+          "git_blob": "6a84e059ad8b43e03c2b06bc2af4dc1d8442808d"
+        }
+      ],
+      "upstream_commit": "8271551172eb6fa4cba47369aedd93790c623df9",
+      "upstream_repository": "https://github.com/aclysma/profiling",
+      "upstream_path": "profiling",
+      "crate_archive_url": "https://crates.io/api/v1/crates/profiling/1.0.18/download",
+      "crate_sha256": "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5",
+      "authors": [
+        "Philip Degarmo <aclysma@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    },
+    {
+      "name": "spirv",
+      "version": "0.3.0+sdk-1.3.268.0",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "licenses/gfx-rs-rspirv-e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "source_url": "https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE",
+          "kind": "upstream_license",
+          "upstream_path": "LICENSE",
+          "git_blob": "d645695673349e3947e8e5ae42332d0ac3164cd7"
+        }
+      ],
+      "upstream_commit": "e91a5debc10c395b36db7721dfff6326d697a1e2",
+      "upstream_repository": "https://github.com/gfx-rs/rspirv",
+      "upstream_path": "spirv",
+      "crate_archive_url": "https://crates.io/api/v1/crates/spirv/0.3.0+sdk-1.3.268.0/download",
+      "crate_sha256": "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844",
+      "authors": [
+        "Lei Zhang <antiagainst@gmail.com>"
+      ],
+      "commit_evidence": "crate-cargo-vcs-info"
+    }
+  ]
+}

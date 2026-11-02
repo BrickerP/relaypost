@@ -1,0 +1,287 @@
+name: Verify and package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RELAYPOST_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  dependencies:
+    name: Resolve reproducible dependencies
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Read the single workspace release version
+        id: version
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELAYPOST_SOURCE_SHA"
+          echo "version=$(python3 scripts/release-metadata.py version)" >> "$GITHUB_OUTPUT"
+      - name: Verify the committed lockfile
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          cargo metadata --locked --format-version 1 > ci-logs/dependency-metadata.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-logs
+          path: ci-logs/
+          retention-days: 90
+
+  format:
+    name: Rust formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting and capture a reviewable fix on failure
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          if cargo fmt --all -- --check 2>&1 | tee ci-logs/rustfmt.log; then
+            exit 0
+          fi
+          cargo fmt --all
+          git diff --binary -- crates > ci-logs/format.patch
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rustfmt-results
+          path: ci-logs/
+          retention-days: 90
+
+  linux:
+    name: Linux core and CLI
+    needs: dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cargo-lock
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-core-cli
+          cache-on-failure: true
+      - name: Test core and CLI
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          cargo test --locked -p relay-core -p relay-cli --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+      - name: Check core and CLI warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked -p relay-core -p relay-cli --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+      - name: Build the CLI and run the isolated sample workflow
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked -p relay-cli 2>&1 | tee ci-logs/cli-build.log
+          python3 scripts/demo.py --binary target/debug/relaypost --output "$RUNNER_TEMP/relaypost-demo" 2>&1 | tee ci-logs/demo.log
+          cp "$RUNNER_TEMP/relaypost-demo/demo-report.json" ci-logs/demo-report.json
+          cp "$RUNNER_TEMP/relaypost-demo/guided-core/demo-report.json" ci-logs/guided-demo-report.json
+      - name: Build and package the Linux release CLI
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked -p relay-cli --release 2>&1 | tee ci-logs/release-build.log
+          cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > ci-logs/release-metadata.json
+          export RUST_LICENSE_DIR="$(rustc --print sysroot)/share/doc/rust"
+          bash scripts/package-linux.sh target/release dist ci-logs/release-metadata.json 2>&1 | tee ci-logs/package.log
+          verify_dir="$(mktemp -d)"
+          tar -xzf dist/*.tar.gz -C "$verify_dir"
+          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-linux-x86_64" "$RELAYPOST_SOURCE_SHA" 2>&1 | tee ci-logs/archive-verification.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relaypost-linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/*.RELEASE.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-verification-logs
+          path: ci-logs/
+          retention-days: 90
+
+  macos:
+    name: macOS arm64 native application
+    needs: dependencies
+    # GitHub's standard macos-15 runner is Apple Silicon; Intel uses macos-15-intel.
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: cargo-lock
+          path: .
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-arm64-native
+          cache-on-failure: true
+      - name: Test core and CLI on the native publication implementation
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-logs
+          uname -a | tee ci-logs/platform.log
+          cargo test --locked -p relay-core -p relay-cli --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+      - name: Build the CLI and native application
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo build --locked --workspace --release 2>&1 | tee ci-logs/build.log
+      - name: Verify Apple Silicon architecture and deployment floor
+        shell: bash
+        run: |
+          set -o pipefail
+          for binary in target/release/relaypost target/release/relay-desktop; do
+            file "$binary" | tee -a ci-logs/deployment-target.log | grep 'arm64'
+            xcrun vtool -show-build "$binary" | tee -a ci-logs/deployment-target.log > ci-logs/current-build-version.log
+            awk '$1 == "minos" { split($2, v, "."); found = 1; if (v[1] > 12 || (v[1] == 12 && v[2] > 0)) exit 1 } END { if (!found) exit 1 }' ci-logs/current-build-version.log
+          done
+      - name: Check native application warnings
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo clippy --locked -p relay-desktop --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+      - name: Exercise the release CLI with isolated synthetic profiles
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/demo.py --binary target/release/relaypost --output "$RUNNER_TEMP/relaypost-demo" 2>&1 | tee ci-logs/demo.log
+          cp "$RUNNER_TEMP/relaypost-demo/demo-report.json" ci-logs/demo-report.json
+          cp "$RUNNER_TEMP/relaypost-demo/guided-core/demo-report.json" ci-logs/guided-demo-report.json
+      - name: Package ad-hoc signed native application
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo metadata --locked --format-version 1 --filter-platform aarch64-apple-darwin > ci-logs/release-metadata.json
+          export RUST_LICENSE_DIR="$(rustc --print sysroot)/share/doc/rust"
+          bash scripts/package-macos.sh target/release dist ci-logs/release-metadata.json 2>&1 | tee ci-logs/package.log
+          verify_dir="$(mktemp -d)"
+          ditto -x -k dist/*.zip "$verify_dir"
+          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64" "$RELAYPOST_SOURCE_SHA" 2>&1 | tee ci-logs/archive-verification.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relaypost-macos-arm64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/*.RELEASE.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-verification-logs
+          path: ci-logs/
+          retention-days: 90
+
+  release-candidate:
+    name: Assemble checked release candidate
+    needs: [dependencies, format, linux, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: relaypost-*
+          merge-multiple: true
+          path: candidate
+      - name: Check exact candidate identity and create a common checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          version = '${{ needs.dependencies.outputs.version }}'
+          directory = Path('candidate')
+          source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert source_sha == os.environ['RELAYPOST_SOURCE_SHA']
+          for platform, suffix in [('macos-arm64', '.zip'), ('linux-x86_64', '.tar.gz')]:
+              name = f'relaypost-{version}-{platform}'
+              assert (directory / (name + suffix)).is_file()
+              manifest = json.loads((directory / (name + '.RELEASE.json')).read_text())
+              assert manifest['source_sha'] == source_sha
+              assert manifest['version'] == version
+              assert manifest['platform'] == platform
+          PY
+          (cd candidate && sha256sum --check *.sha256 && sha256sum *.zip *.tar.gz *.RELEASE.json > SHA256SUMS)
+          cp docs/RELEASE.md candidate/RELEASE.md
+          printf 'Checked RelayPost %s candidate from %s. No GitHub Release was published.\n' '${{ needs.dependencies.outputs.version }}' "$RELAYPOST_SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relaypost-${{ needs.dependencies.outputs.version }}-candidate
+          path: candidate/
+          if-no-files-found: error
+          retention-days: 90

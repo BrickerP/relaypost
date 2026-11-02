@@ -1,0 +1,16 @@
+[package]
+name = "relay-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "RelayPost native desktop app"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+directories = "6"
+eframe = { version = "=0.31.1", default-features = false, features = ["accesskit", "default_fonts", "glow", "wayland", "x11"] }
+relay-core = { path = "../relay-core" }
+rfd = { version = "=0.15.3", default-features = false, features = ["xdg-portal", "async-std"] }
+zeroize = "1.8"
