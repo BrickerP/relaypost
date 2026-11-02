@@ -4,11 +4,14 @@
 //! home path; keys are unlocked for the duration of an individual operation.
 mod archive;
 mod codec;
+pub mod demo;
 mod format;
 mod fsutil;
 mod identity;
 mod profile;
 mod store;
+
+pub use demo::{DemoPhase, DemoSession, DemoSnapshot};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

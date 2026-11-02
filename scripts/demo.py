@@ -29,6 +29,103 @@ def check(condition, message):
         raise RuntimeError(message)
 
 
+def validate_guided_command(binary, root, transcript):
+    """Independently inspect the shared engine's output, never implement its flow."""
+    output = root / "guided-core"
+    blocked_home = root / "SYNTHETIC-not-a-profile"
+    blocked_home.write_bytes(b"SYNTHETIC must remain a regular file")
+    command = [str(binary), "--home", str(blocked_home),
+               "--password-file", str(root / "does-not-exist.password"),
+               "demo", "--output", str(output), "--json"]
+    print("> shared guided demo (profile and password input must be ignored)", flush=True)
+    result = subprocess.run(command, input="", capture_output=True, text=True,
+                            check=False, timeout=300)
+    transcript.append({"profile": "guided-core (isolated)",
+                       "arguments": ["demo", "--output", str(output), "--json"],
+                       "exit_code": result.returncode})
+    check(result.returncode == 0, f"Guided demo failed: {result.stderr.strip()}")
+    report = json.loads(result.stdout)
+    check(report["phase"] == "Confirmed", "Guided command did not finish all real stages")
+    check(report["sender_state"] == "Confirmed", "Guided sender is not confirmed")
+    check(report["root"] == str(output), "Guided demo escaped its requested root")
+    report_path = Path(report["report_path"])
+    check(report_path == output / "demo-report.json", "Unexpected guided report path")
+    check(json.loads(report_path.read_text(encoding="utf-8")) == report,
+          "Guided stdout must match the immutable report")
+
+    def hashes(directory):
+        return {path.relative_to(directory).as_posix(): digest(path)
+                for path in sorted(directory.rglob("*")) if path.is_file()}
+
+    sources = output / "source_files"
+    check(sum(path.stat().st_size for path in sources.rglob("*") if path.is_file())
+          == 21 * MIB, "Guided sample is not 21 MiB")
+    check(hashes(sources) == report["source_sha256"], "Guided source digests differ from disk")
+    received_path = Path(report["received_path"])
+    check(received_path.is_relative_to(output), "Guided received files escaped their root")
+    check(hashes(received_path) == report["received_sha256"] == report["source_sha256"],
+          "Guided received bytes do not match both reported and source digests")
+    check(report["repaired_shards"] == 4, "Guided repair did not reconstruct four shards")
+
+    parcel = Path(report["carrier_parcel_path"])
+    envelope_bytes = (parcel / "envelope.json").read_bytes()
+    envelope = json.loads(envelope_bytes)
+    group = envelope["groups"][0]
+    actual_bad = []
+    for index, shard in enumerate(group["shards"]):
+        path = parcel / shard["path"]
+        if not path.is_file() or path.stat().st_size != group["shard_bytes"] \
+                or digest(path) != shard["sha256"]:
+            actual_bad.append(index)
+    check(len(actual_bad) == 4 and sum(index < 20 for index in actual_bad) == 2,
+          "Guided carrier does not contain two data and two parity erasures")
+    check(actual_bad == report["damaged_shard_indices"]
+          == report["inspection_after_damage"]["groups"][0]["missing_shards"],
+          "Guided inspection does not match real shard bytes")
+    refusal = report["five_erasure_refusal_evidence"]
+    check(not refusal["recoverable"] and len(refusal["groups"][0]["missing_shards"]) == 5
+          and bool(report["five_erasure_receive_error"]),
+          "Guided five-erasure case lacks real receive-refusal evidence")
+
+    # Reassemble pristine data shards, without invoking the demo's codec.
+    pristine = output / "alice/outbox" / envelope["parcel_id"]
+    ciphertext_hash = hashlib.sha256()
+    ciphertext_size = 0
+    for item in envelope["groups"]:
+        data = b"".join((pristine / shard["path"]).read_bytes()
+                        for shard in item["shards"][:item["data_shards"]])[:item["bytes"]]
+        ciphertext_hash.update(data)
+        ciphertext_size += len(data)
+    check(ciphertext_hash.hexdigest() == envelope["parcel_id"]
+          and ciphertext_size == envelope["ciphertext_bytes"],
+          "Guided parcel ID is not the actual retained ciphertext hash")
+    receipt = json.loads((Path(report["receipt_path"]) / "receipt.json").read_text())
+    check(receipt["parcel_id"] == envelope["parcel_id"]
+          and receipt["envelope_sha256"] == hashlib.sha256(envelope_bytes).hexdigest()
+          and receipt["result"] == "committed", "Guided receipt does not bind the real parcel")
+    connection = sqlite3.connect(output / "alice/state.sqlite3")
+    try:
+        state = connection.execute(
+            "SELECT record_json FROM deliveries WHERE direction = 'Outgoing' AND parcel_id = ?",
+            (envelope["parcel_id"],)).fetchone()
+    finally:
+        connection.close()
+    check(state and json.loads(state[0])["state"] == "Confirmed",
+          "Guided report differs from the real sender index")
+    check(blocked_home.read_bytes() == b"SYNTHETIC must remain a regular file",
+          "Demo command touched the requested normal profile")
+    for forbidden in ("AGE-SECRET-KEY-", "synthetic-demo-alice-v1", "synthetic-demo-bob-v1"):
+        check(forbidden not in result.stdout, "Guided report exposed synthetic secret material")
+    report_hash = digest(report_path)
+    repeated = subprocess.run(command, input="", capture_output=True, text=True,
+                              check=False, timeout=30)
+    check(repeated.returncode != 0 and digest(report_path) == report_hash,
+          "Guided command must refuse an existing root without overwriting its report")
+    return {"report": str(report_path), "phase": report["phase"],
+            "independent_disk_validation": True, "normal_profile_ignored": True,
+            "password_input_ignored": True, "existing_root_refused": True}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path,
@@ -207,6 +304,7 @@ def main():
     check(restored["state"] == "Confirmed" and not restored.get("local_error"),
           "Exact outgoing restoration must clear local health without changing delivery phase")
     check(digest(source) == source_hash, "Source file was changed")
+    guided = validate_guided_command(binary, root, transcript)
     report = {
         "conditions": "two isolated profiles and separate CLI processes on one machine; directory carrier",
         "synthetic_data_only": True,
@@ -224,6 +322,7 @@ def main():
         "postpublication_stage_cleaned": True,
         "incomplete_stage_explicitly_discarded": True,
         "confirmed_health_restored": True,
+        "shared_guided_demo": guided,
         "commands": transcript,
     }
     (root / "demo-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

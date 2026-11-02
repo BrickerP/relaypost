@@ -8,29 +8,41 @@ and carry encrypted parcels through a USB drive or any ordinary directory. They
 never need to be online together. A signed return receipt confirms a verified
 recipient commit.
 
-## Try the native application
+## Install and try it
 
-1. Open a successful [Verify and package run](https://github.com/BrickerP/relaypost/actions/workflows/ci.yml).
-2. Download `relaypost-macos-arm64`, extract it, and verify the ZIP against its
-   adjacent SHA-256 file. The ZIP contains `RelayPost.app` and its bundled CLI.
-3. Open the app and create an identity in **Identity & Contacts**. On the other
-   device do the same, exchange public cards, compare the complete fingerprints
-   through a trusted channel, and pin trust on both devices.
-4. In **Send**, select a trusted recipient and regular files, seal a parcel, and
-   export it to a carrier directory. The recipient uses **Receive** to inspect
-   and save it, exports its receipt, and returns that receipt to the sender.
+RelayPost 0.2.0 provides an Apple Silicon macOS app with a bundled CLI and an
+Ubuntu 24.04 x86_64 Linux CLI archive. Rust, Python and a source checkout are not
+needed to run the packages. See the [three-step installation guide](docs/INSTALL.md).
 
-The macOS bundle is an Apple Silicon prototype with an ad-hoc signature, without
-Developer ID signing or notarization. Core and CLI are tested on Linux and macOS;
-desktop builds currently target macOS only. Windows is not supported. Compilation
-and Rust checks run in GitHub Actions, with no local compilation.
+1. Download the platform archive and its SHA-256 file from the versioned
+   [GitHub Release](https://github.com/BrickerP/relaypost/releases) when published.
+   Before publication, a successful [Verify and package run](https://github.com/BrickerP/relaypost/actions/workflows/ci.yml)
+   supplies `relaypost-0.2.0-candidate` for review. An Actions artifact is not the
+   final public distribution link.
+2. Verify the archive, extract it and run its included `verify-package.sh` as shown
+   in the installation guide. On macOS, move `RelayPost.app` into Applications and
+   open it using the normal macOS approval flow if prompted.
+3. Choose **Try Demo** in the app, or run `relaypost demo --output NEW_DIRECTORY`.
+   The shared Rust core takes two disposable synthetic identities through
+   sealing, damaged-carrier inspection, repair and a signed return receipt.
 
-For a completely isolated two-profile example, see the [runnable demo](docs/DEMO.md).
-It executes the real prebuilt CLI, damages synthetic data, verifies repair,
-checks duplicate import, and returns a signed receipt. `--home DIRECTORY` gives
-either interface its own profile; otherwise they share the OS application-data
-directory. Run the bundled `relaypost --help` for commands. Use a masked prompt,
-`--password-stdin`, or `--password-file`; never put a password in command arguments.
+For real files, create identities in **Identity & Contacts**, exchange public
+cards, compare the complete fingerprints through a trusted channel, and pin
+trust on both devices. In **Send**, seal and export to a carrier directory. The
+recipient uses **Receive** to save it and returns the exported signed receipt.
+
+The macOS app is built for Apple Silicon/macOS 12+ and exercised on macOS 15;
+macOS 12 itself has not been tested. It is ad-hoc signed, without Developer ID
+signing or notarization. Linux CLI validation uses Ubuntu 24.04/glibc 2.39; other
+distributions are unverified. Intel Macs, Linux GUI and Windows are unsupported.
+Compilation and Rust checks run in GitHub Actions, with no local compilation.
+
+See the [runnable demo and verification limits](docs/DEMO.md). `--home DIRECTORY`
+gives either interface its own profile; otherwise they share the OS
+application-data directory. Run the bundled `relaypost --help` for commands. Use
+a masked prompt, `--password-stdin`, or `--password-file`; never put a password
+in command arguments. Packages include this project's MIT license, dependency
+inventory and supplied third-party notices; see [release provenance](docs/RELEASE.md).
 
 ## What works
 
@@ -94,6 +106,8 @@ still require field testing.
 - [Project plan (Chinese)](docs/PROJECT_PLAN.zh-CN.md)
 - [Implementation contract](docs/IMPLEMENTATION_CONTRACT.md)
 - [Demo and verification limits](docs/DEMO.md)
+- [Install prebuilt packages](docs/INSTALL.md)
+- [Release process and provenance](docs/RELEASE.md)
 - [Kiro development evidence](docs/KIRO_USAGE.md)
 - [Review closure (Chinese)](docs/REVIEW_CLOSURE.zh-CN.md)
 

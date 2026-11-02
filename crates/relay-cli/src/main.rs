@@ -1,11 +1,11 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use relay_core::{Contact, Direction, Inspection, ParcelRecord, PeerCard, Profile};
+use relay_core::{Contact, DemoSession, Direction, Inspection, ParcelRecord, PeerCard, Profile};
 use serde::Serialize;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 #[derive(Parser)]
@@ -77,6 +77,12 @@ enum Command {
     },
     /// Stop future local exports; already exported copies remain valid
     Cancel { parcel_id: String },
+    /// Run a guided demo with synthetic profiles in a new directory
+    Demo {
+        /// Path for the new demo root directory (must not exist)
+        #[arg(long, value_name = "DIRECTORY")]
+        output: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -136,6 +142,12 @@ fn default_home() -> Result<PathBuf> {
 }
 
 fn run(cli: &Cli) -> Result<()> {
+    // Dispatch demo BEFORE resolving --home or opening the real profile.
+    // Invalid --home and missing OS data directories are never touched.
+    if let Command::Demo { output } = &cli.command {
+        return run_demo(cli.json, output.as_path());
+    }
+
     let home = match &cli.home {
         Some(home) => home.clone(),
         None => default_home()?,
@@ -292,7 +304,129 @@ fn run(cli: &Cli) -> Result<()> {
                 ),
             )?;
         }
+        // Demo is dispatched above before reaching this match.
+        Command::Demo { .. } => unreachable!("demo dispatched before profile open"),
     }
+    Ok(())
+}
+
+/// Run the full guided demo noninteractively — no pauses regardless of mode.
+/// `json == true`: emit only the final snapshot JSON to stdout, nothing else.
+/// `json == false`: print human-readable phase summaries and simulation notice.
+fn run_demo(json: bool, output: &Path) -> Result<()> {
+    macro_rules! print_unless_json {
+        ($fmt:literal $(, $arg:expr)* $(,)?) => {
+            if !json {
+                println!($fmt $(, $arg)*);
+            }
+        };
+    }
+
+    // --- Phase: Prepared --------------------------------------------------
+    let mut session = DemoSession::start(output)
+        .with_context(|| format!("Cannot start demo at {}", output.display()))?;
+
+    let snap = session.snapshot();
+    print_unless_json!(
+        "\n=== Phase: Prepared ===\nDemo root:       {}\nCarrier parcel:  {}\nSource SHA-256:",
+        snap.root.display(),
+        snap.carrier_parcel_path
+            .as_ref()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<none>".into()),
+    );
+    for (name, hash) in &snap.source_sha256 {
+        print_unless_json!("  {:<12}  {}", name, hash);
+    }
+    if let Some(insp) = &snap.initial_inspection {
+        print_unless_json!(
+            "Initial inspection: recoverable={} groups={}",
+            insp.recoverable,
+            insp.groups.len(),
+        );
+        for g in &insp.groups {
+            print_unless_json!(
+                "  Group {}: {} data + {} parity",
+                g.index,
+                g.data_shards,
+                g.parity_shards,
+            );
+        }
+    }
+
+    // --- Phase: Damaged ---------------------------------------------------
+    let snap = session.advance().context("advance to Damaged")?;
+    print_unless_json!("\n=== Phase: Damaged ===");
+    print_unless_json!(
+        "Permanently damaged shards in group 0: {:?}",
+        snap.damaged_shard_indices,
+    );
+    if let Some(insp) = &snap.inspection_after_damage {
+        let g0 = insp.groups.first();
+        print_unless_json!(
+            "Inspection after 4 erasures: group 0 missing={} recoverable={}",
+            g0.map(|g| g.missing_shards.len()).unwrap_or(0),
+            g0.map(|g| g.recoverable).unwrap_or(false),
+        );
+    }
+    if let Some(insp) = &snap.five_erasure_refusal_evidence {
+        let g0 = insp.groups.first();
+        print_unless_json!(
+            "Five-erasure evidence:         group 0 missing={} recoverable={}",
+            g0.map(|g| g.missing_shards.len()).unwrap_or(0),
+            g0.map(|g| g.recoverable).unwrap_or(false),
+        );
+    }
+    if let Some(err) = &snap.five_erasure_receive_error {
+        print_unless_json!("Refused receive error: {}", err);
+    }
+    print_unless_json!("Fifth shard restored from Alice outbox. Group 0 recoverable confirmed.");
+
+    // --- Phase: Received --------------------------------------------------
+    let snap = session.advance().context("advance to Received")?;
+    print_unless_json!("\n=== Phase: Received ===");
+    print_unless_json!(
+        "Repaired shards: {}",
+        snap.repaired_shards.unwrap_or(0),
+    );
+    print_unless_json!("Source vs received SHA-256:");
+    for (name, src_hash) in &snap.source_sha256 {
+        let rcv_hash = snap.received_sha256.get(name).map(String::as_str).unwrap_or("<missing>");
+        let status = if src_hash == rcv_hash { "MATCH" } else { "MISMATCH" };
+        print_unless_json!("  {:<12}  {}  {}", name, status, src_hash);
+    }
+    if let Some(state) = &snap.sender_state {
+        print_unless_json!("Sender state: {:?}", state);
+    }
+
+    // --- Phase: Confirmed -------------------------------------------------
+    let snap = session.advance().context("advance to Confirmed")?;
+    print_unless_json!("\n=== Phase: Confirmed ===");
+    if let Some(state) = &snap.sender_state {
+        print_unless_json!("Sender state: {:?}", state);
+    }
+    if let Some(path) = &snap.receipt_path {
+        print_unless_json!("Receipt path: {}", path.display());
+    }
+
+    // --- Export report ----------------------------------------------------
+    let report_path = session.export_report().context("export demo report")?;
+    print_unless_json!("Report written: {}", report_path.display());
+    print_unless_json!(
+        "\nDemo complete. All stages passed genuine core operations.\n\
+         NOTE: This was a ONE-MACHINE DIRECTORY SIMULATION, not a real USB transfer\n\
+               or two-device exchange."
+    );
+
+    // Final JSON output (if requested) — only line to stdout in json mode.
+    if json {
+        let final_snap = session.snapshot();
+        let stdout = io::stdout();
+        let mut output_handle = stdout.lock();
+        serde_json::to_writer(&mut output_handle, &final_snap)?;
+        writeln!(output_handle)?;
+    }
+
     Ok(())
 }
 

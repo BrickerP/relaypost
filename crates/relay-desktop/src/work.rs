@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use relay_core::{
-    Contact, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary,
+    Contact, DemoSession, DemoSnapshot, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult,
+    RecoverySummary,
 };
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
@@ -37,6 +38,12 @@ pub enum Action {
     Recover(Zeroizing<String>),
     DiscardIncomplete,
     Cancel(String),
+    /// Start a new demo session at the given (non-existent) root path.
+    DemoStart(PathBuf),
+    /// Advance the demo session one phase. Takes ownership; returns it.
+    DemoAdvance(Box<DemoSession>),
+    /// Copy the demo report from source to a user-chosen target path.
+    DemoCopyReport(PathBuf, PathBuf),
 }
 
 impl Action {
@@ -57,6 +64,9 @@ impl Action {
             Self::Recover(_) => "Checking committed files and recovering local records…",
             Self::DiscardIncomplete => "Discarding interrupted receive work…",
             Self::Cancel(_) => "Cancelling future local exports…",
+            Self::DemoStart(_) => "Starting guided demo — creating synthetic profiles…",
+            Self::DemoAdvance(_) => "Advancing guided demo to next phase…",
+            Self::DemoCopyReport(..) => "Saving demo report to chosen location…",
         }
     }
 }
@@ -69,6 +79,13 @@ pub enum Payload {
     Received(Box<ReceiveResult>),
     Recovered(RecoverySummary),
     Discarded,
+    /// Demo phase completed. Carries back the session (for the next advance)
+    /// and the updated public snapshot. `DemoSnapshot` is boxed to keep this
+    /// enum variant's inline size reasonable.
+    DemoUpdate {
+        session: Box<DemoSession>,
+        snapshot: Box<DemoSnapshot>,
+    },
 }
 
 pub struct SealedDetails {
@@ -223,6 +240,74 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
                 format!("Discarded {count} interrupted receive staging directories."),
                 Payload::Discarded,
             )
+        }
+        Action::DemoStart(root) => {
+            // Demo actions do not refresh the real profile; return early.
+            let session = DemoSession::start(root)?;
+            let snapshot = session.snapshot();
+            return Ok(Completed {
+                notice: "Demo started — profiles created, parcel sealed and exported.".to_owned(),
+                snapshot: None,
+                payload: Payload::DemoUpdate {
+                    session: Box::new(session),
+                    snapshot: Box::new(snapshot),
+                },
+            });
+        }
+        Action::DemoAdvance(mut session) => {
+            session.advance()?;
+            // If we just reached Confirmed, also export the report so
+            // report_path is populated in the snapshot.
+            if session.snapshot().phase == relay_core::DemoPhase::Confirmed {
+                session.export_report()?;
+            }
+            let snapshot = session.snapshot();
+            let notice = match snapshot.phase {
+                relay_core::DemoPhase::Damaged => {
+                    "Demo damaged: data shards 0,1 deleted; parity 20,21 XOR'd; 5-erasure receive refused; shard 2 restored."
+                        .to_owned()
+                }
+                relay_core::DemoPhase::Received => {
+                    format!(
+                        "Demo received: {} shards repaired, SHA-256 hashes match.",
+                        snapshot.repaired_shards.context("Received demo snapshot has no repaired-shard evidence")?
+                    )
+                }
+                relay_core::DemoPhase::Confirmed => {
+                    "Demo confirmed: Alice's delivery is Confirmed.".to_owned()
+                }
+                relay_core::DemoPhase::Prepared => {
+                    bail!("Demo did not advance beyond Prepared. Run a new guided demo.")
+                }
+            };
+            return Ok(Completed {
+                notice,
+                snapshot: None,
+                payload: Payload::DemoUpdate {
+                    session,
+                    snapshot: Box::new(snapshot),
+                },
+            });
+        }
+        Action::DemoCopyReport(source, target) => {
+            // Demo actions do not refresh the real profile; return early.
+            use std::io;
+            let mut src = std::fs::File::open(&source)
+                .with_context(|| format!("Cannot open report: {}", source.display()))?;
+            let mut dst = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&target)
+                .with_context(|| format!("Cannot create target (file may already exist): {}", target.display()))?;
+            io::copy(&mut src, &mut dst)
+                .with_context(|| format!("Error copying report to {}", target.display()))?;
+            dst.sync_all()
+                .with_context(|| format!("Error syncing report to {}", target.display()))?;
+            return Ok(Completed {
+                notice: format!("Demo report saved to {}", target.display()),
+                snapshot: None,
+                payload: Payload::None,
+            });
         }
     };
     Ok(Completed {

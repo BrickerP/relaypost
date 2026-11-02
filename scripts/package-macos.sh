@@ -2,28 +2,29 @@
 # Package existing CI-built binaries. This script never invokes a compiler.
 set -euo pipefail
 
-if [[ "$(uname -s)" != Darwin ]]; then
-  echo "Native .app packaging requires macOS." >&2
+if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
+  echo "Native .app packaging requires Apple Silicon macOS." >&2
   exit 1
 fi
-
 binary_dir="${1:-target/release}"
 output_dir="${2:-dist}"
-app="$output_dir/RelayPost.app"
+metadata="${3:?Usage: package-macos.sh BINARY_DIR OUTPUT_DIR CARGO_METADATA_JSON}"
+version="$(python3 scripts/release-metadata.py version)"
+name="relaypost-$version-macos-arm64"
+package="$output_dir/$name"
+app="$package/RelayPost.app"
 for binary in relaypost relay-desktop; do
-  if [[ ! -x "$binary_dir/$binary" ]]; then
-    echo "Missing prebuilt executable: $binary_dir/$binary" >&2
-    exit 1
-  fi
+  test -x "$binary_dir/$binary" || { echo "Missing prebuilt executable: $binary_dir/$binary" >&2; exit 1; }
 done
-if [[ -e "$app" ]]; then
-  echo "Refusing to replace existing application: $app" >&2
-  exit 1
-fi
+python3 scripts/release-metadata.py prepare --target aarch64-apple-darwin --metadata "$metadata" --output "$package"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary_dir/relay-desktop" "$app/Contents/MacOS/relay-desktop"
 cp "$binary_dir/relaypost" "$app/Contents/MacOS/relaypost"
-cat > "$app/Contents/Info.plist" <<'PLIST'
+for file in RELEASE.json BUILD_INFO LICENSE README.md QUICK_START.md INSTALL.md DEMO.md RELEASE.md THIRD_PARTY_NOTICES.md DEPENDENCIES.json; do
+  cp "$package/$file" "$app/Contents/Resources/$file"
+done
+if [[ -d "$package/licenses" ]]; then cp -R "$package/licenses" "$app/Contents/Resources/licenses"; fi
+cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -32,20 +33,22 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>RelayPost</string>
 <key>CFBundleDisplayName</key><string>RelayPost</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
-<key>CFBundleVersion</key><string>1</string>
+<key>CFBundleShortVersionString</key><string>$version</string>
+<key>CFBundleVersion</key><string>$version</string>
 <key>LSMinimumSystemVersion</key><string>12.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
 plutil -lint "$app/Contents/Info.plist"
-# Ad-hoc signing lets the arm64 executable carry a local signature. It does not
-# supply an Apple Developer identity, notarization, or Gatekeeper approval.
+# This signature provides bundle integrity, not Developer ID or Gatekeeper approval.
 codesign --force --sign - "$app/Contents/MacOS/relaypost"
 codesign --force --sign - "$app/Contents/MacOS/relay-desktop"
 codesign --force --sign - "$app"
-codesign --verify --deep --strict "$app"
-archive="$output_dir/relaypost-macos-arm64.zip"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
-(cd "$output_dir" && shasum -a 256 relaypost-macos-arm64.zip > relaypost-macos-arm64.zip.sha256)
+python3 scripts/release-metadata.py checksums "$package"
+bash scripts/verify-package.sh "$package" "${GITHUB_SHA:-$(git rev-parse HEAD)}"
+archive="$output_dir/$name.zip"
+test ! -e "$archive"
+ditto -c -k --sequesterRsrc --keepParent "$package" "$archive"
+(cd "$output_dir" && shasum -a 256 "$name.zip" > "$name.zip.sha256")
+cp "$package/RELEASE.json" "$output_dir/$name.RELEASE.json"
 echo "Packaged $archive (ad-hoc signed, not notarized)."

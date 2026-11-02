@@ -1,8 +1,8 @@
 use crate::work::{self, Action, Completed, Payload};
 use eframe::egui::{self, Color32, RichText, TextEdit, Ui};
 use relay_core::{
-    Contact, DeliveryState, Direction, Inspection, ParcelRecord, PeerCard, Profile, ReceiveResult,
-    RecoverySummary,
+    Contact, DeliveryState, DemoPhase, DemoSession, DemoSnapshot, Direction, Inspection,
+    ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary,
 };
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -20,10 +20,12 @@ const RED: Color32 = Color32::from_rgb(167, 60, 52);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
+    Welcome,
     Send,
     Receive,
     History,
     Identity,
+    Demo,
 }
 
 struct Pending {
@@ -38,6 +40,7 @@ pub struct RelayApp {
     loaded: bool,
     identity: Option<PeerCard>,
     identity_error: Option<String>,
+    identity_missing: bool,
     contacts: Vec<Contact>,
     deliveries: Vec<ParcelRecord>,
     pending: Option<Pending>,
@@ -61,6 +64,10 @@ pub struct RelayApp {
     trust_fingerprint: String,
     cancel_id: Option<String>,
     discard_incomplete: bool,
+    /// Guided demo session (owned here; moved into worker and returned).
+    demo_session: Option<Box<DemoSession>>,
+    /// Last known public demo snapshot.
+    demo_snapshot: Option<DemoSnapshot>,
 }
 
 impl RelayApp {
@@ -69,10 +76,11 @@ impl RelayApp {
         let mut app = Self {
             profile,
             home,
-            screen: Screen::Send,
+            screen: Screen::Identity,
             loaded: false,
             identity: None,
             identity_error: None,
+            identity_missing: false,
             contacts: Vec::new(),
             deliveries: Vec::new(),
             pending: None,
@@ -96,6 +104,8 @@ impl RelayApp {
             trust_fingerprint: String::new(),
             cancel_id: None,
             discard_incomplete: false,
+            demo_session: None,
+            demo_snapshot: None,
         };
         app.start(&context.egui_ctx, Action::Refresh);
         app
@@ -149,12 +159,24 @@ impl RelayApp {
                             self.identity_error = Some(error);
                         }
                     }
+                    self.identity_missing = self.identity.is_none()
+                        && matches!(
+                            std::fs::symlink_metadata(self.home.join("identity")),
+                            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+                        );
                     self.contacts = snapshot.contacts;
                     self.deliveries = snapshot.deliveries;
-                    if !self.loaded && self.identity.is_none() {
-                        self.screen = Screen::Identity;
+                    if !self.loaded {
+                        // First load: route to the right starting screen.
+                        if self.identity.is_some() {
+                            self.screen = Screen::Send;
+                        } else if self.identity_missing {
+                            self.screen = Screen::Welcome;
+                        } else {
+                            self.screen = Screen::Identity;
+                        }
+                        self.loaded = true;
                     }
-                    self.loaded = true;
                 }
                 match completed.payload {
                     Payload::None => {}
@@ -174,6 +196,10 @@ impl RelayApp {
                     }
                     Payload::Recovered(summary) => self.recovery = Some(summary),
                     Payload::Discarded => self.recovery = None,
+                    Payload::DemoUpdate { session, snapshot } => {
+                        self.demo_session = Some(session);
+                        self.demo_snapshot = Some(*snapshot);
+                    }
                 }
             }
         }
@@ -225,7 +251,11 @@ impl RelayApp {
                             .identity
                             .as_ref()
                             .map(|card| card.name.as_str())
-                            .unwrap_or("Set up this device");
+                            .unwrap_or(if self.identity_missing {
+                                "Set up this device"
+                            } else {
+                                "Identity needs attention"
+                            });
                         ui.label(RichText::new(identity).color(Color32::from_rgb(219, 231, 234)));
                     });
                 });
@@ -243,6 +273,7 @@ impl RelayApp {
                         (Screen::Receive, "02  Receive"),
                         (Screen::History, "03  History"),
                         (Screen::Identity, "04  Identity & Contacts"),
+                        (Screen::Demo, "Demo"),
                     ] {
                         if ui
                             .selectable_label(self.screen == screen, RichText::new(label).strong())
@@ -844,15 +875,19 @@ impl RelayApp {
                     }
                 }
                 ui.label(RichText::new("This exports public keys only. Keep your password-protected profile directory safe; it contains the private identity.").small().color(MUTED));
+            } else if !self.identity_missing {
+                ui.label(RichText::new("Existing device identity needs attention").strong().color(RED));
+                if let Some(error) = &self.identity_error {
+                    ui.label(RichText::new(error).color(RED));
+                }
+                ui.label("RelayPost could not read this profile's existing identity. Restore an intact profile backup, or launch with --home pointing to a separate directory to create a new device identity.");
+                if ui.button("Refresh local records").clicked() {
+                    self.start(ui.ctx(), Action::Refresh);
+                }
             } else {
                 ui.label(
                     "Create a local identity. Its private keys are encrypted with your password.",
                 );
-                if let Some(error) = &self.identity_error {
-                    ui.collapsing("Identity status", |ui| {
-                        ui.label(RichText::new(error).color(MUTED));
-                    });
-                }
                 ui.label("Device name");
                 ui.add(
                     TextEdit::singleline(&mut self.identity_name)
@@ -942,6 +977,411 @@ impl RelayApp {
             value(ui, "Local app data", &self.home.display().to_string());
             ui.label(RichText::new("The CLI uses this same profile by default. Launch with --home to use an isolated profile.").small().color(MUTED));
         });
+    }
+
+    fn welcome_screen(&mut self, ui: &mut Ui) {
+        page_title(
+            ui,
+            "Welcome to RelayPost",
+            "Carry encrypted files offline. Verify their arrival.",
+        );
+        surface(ui, |ui| {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(
+                    "RelayPost encrypts files for a trusted recipient, carries the parcel \
+                     offline via USB drive or any shared directory, and proves the recipient \
+                     saved it via a returned signed receipt. No accounts, no cloud, no \
+                     network connection required.",
+                )
+                .size(15.0),
+            );
+            ui.add_space(16.0);
+            ui.horizontal(|ui| {
+                if primary(ui, "Try guided demo", !self.busy()).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.start_demo(&ctx);
+                }
+                ui.add_space(8.0);
+                if ui.button("Set up my device").clicked() {
+                    self.switch_screen(Screen::Identity);
+                }
+            });
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(
+                    "The guided demo runs two synthetic profiles on this machine — \
+                     no real keys or files are touched.",
+                )
+                .small()
+                .color(MUTED),
+            );
+        });
+    }
+
+    fn start_demo(&mut self, context: &egui::Context) {
+        if self.busy() {
+            return;
+        }
+        // Compute a unique temp root; never reuse or delete old ones.
+        let pid = std::process::id();
+        let nanos = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos(),
+            Err(error) => {
+                self.error = Some(format!("Cannot name a new demo directory: {error}. Correct the system clock and try again."));
+                return;
+            }
+        };
+        let temp = match std::fs::canonicalize(std::env::temp_dir()) {
+            Ok(path) => path,
+            Err(error) => {
+                self.error = Some(format!("Cannot locate the temporary directory for a new demo: {error}. Check the system's temporary directory and try again."));
+                return;
+            }
+        };
+        let root = temp.join(format!("relaypost-demo-{pid}-{nanos}"));
+        // Clear old snapshot/session only when not busy (already guaranteed above).
+        self.demo_snapshot = None;
+        self.demo_session = None;
+        self.switch_screen(Screen::Demo);
+        self.start(context, Action::DemoStart(root));
+    }
+
+    fn demo_screen(&mut self, ui: &mut Ui) {
+        page_title(
+            ui,
+            "Guided Demo",
+            "Local one-machine directory simulation — no real keys, no user files, no physical USB drive.",
+        );
+
+        // "Run new guided demo" always available (not gated on busy — primary handles that).
+        {
+            let ctx = ui.ctx().clone();
+            if primary(ui, "Run new guided demo", !self.busy()).clicked() {
+                self.start_demo(&ctx);
+            }
+        }
+        ui.label(
+            RichText::new(
+                "Each run creates a fresh private temp directory. Old demo folders are preserved. \
+                 Two synthetic profiles (Alice and Bob) exchange two generated files (20 MiB + 1 MiB) using \
+                 the real production cryptographic and Reed–Solomon engine.",
+            )
+            .small()
+            .color(MUTED),
+        );
+        ui.add_space(12.0);
+
+        // Clone snapshot to avoid borrow conflicts during draw.
+        let snap = match self.demo_snapshot.clone() {
+            Some(s) => s,
+            None => {
+                surface(ui, |ui| {
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("What will happen").strong());
+                    ui.add_space(4.0);
+                    ui.label("1. Two synthetic identities (Alice and Bob) are created in a private temp directory.");
+                    ui.label("2. Two synthetic files (20 MiB + 1 MiB) are generated, sealed into a parcel with Reed–Solomon parity shards, and exported to a simulated carrier directory.");
+                    ui.label("3. You advance through Damaged → Repair and receive → Carry back signed receipt, watching the engine refuse an over-budget receive and then repair the remaining erasures.");
+                    ui.label("4. Alice's delivery state reaches Confirmed. A JSON evidence report is exportable.");
+                    ui.add_space(8.0);
+                });
+                return;
+            }
+        };
+
+        ui.label(RichText::new(format!("{} synthetic source files", snap.source_sha256.len())).color(MUTED));
+        if !self.busy() && self.demo_session.is_none() {
+            ui.label(RichText::new("This demo session stopped. The last successful phase is shown below. Run a new guided demo to continue with a fresh directory.").color(RED));
+            ui.add_space(8.0);
+        }
+
+        // Phase badge + purpose description.
+        ui.horizontal(|ui| {
+            let (badge, color, purpose) = match snap.phase {
+                DemoPhase::Prepared => (
+                    "PREPARED",
+                    GREEN,
+                    "Parcel sealed and exported to carrier. Inspect initial shard health before any damage.",
+                ),
+                DemoPhase::Damaged => (
+                    "DAMAGED",
+                    AMBER,
+                    "Carrier copy damaged: 2 data shards deleted, 2 parity shards XOR-corrupted. \
+                     A 5-erasure receive was refused (over budget). One shard was restored, \
+                     leaving the group within repair budget.",
+                ),
+                DemoPhase::Received => (
+                    "RECEIVED",
+                    GREEN,
+                    "Bob repaired the erasures and received the batch. SHA-256 hashes verified. \
+                     Signed receipt ready — it will be exported and carried back to Alice next.",
+                ),
+                DemoPhase::Confirmed => (
+                    "CONFIRMED",
+                    GREEN,
+                    "Alice verified Bob's signed receipt. Delivery is Confirmed. \
+                     Export the JSON evidence report to keep a record.",
+                ),
+            };
+            ui.label(RichText::new(badge).size(11.0).strong().color(color));
+            ui.label(RichText::new(purpose).color(MUTED));
+        });
+        ui.add_space(8.0);
+
+        // Paths.
+        surface(ui, |ui| {
+            ui.label(RichText::new("Demo directory layout").strong());
+            value(ui, "Root", &snap.root.display().to_string());
+            if let Some(p) = &snap.carrier_parcel_path {
+                value(ui, "Carrier parcel", &p.display().to_string());
+            }
+            if let Some(p) = &snap.received_path {
+                value(ui, "Received batch", &p.display().to_string());
+            }
+            if let Some(p) = &snap.receipt_path {
+                value(ui, "Signed receipt", &p.display().to_string());
+            }
+            if let Some(p) = &snap.report_path {
+                value(ui, "JSON evidence report", &p.display().to_string());
+            }
+        });
+        ui.add_space(8.0);
+
+        // Sender delivery state.
+        if let Some(state) = &snap.sender_state {
+            surface(ui, |ui| {
+                ui.label(RichText::new("Alice's sender state").strong());
+                state_badge(ui, state);
+                ui.label(state_description(state));
+            });
+            ui.add_space(8.0);
+        }
+
+        // Initial inspection (always shown once available).
+        if let Some(insp) = &snap.initial_inspection {
+            surface(ui, |ui| {
+                ui.label(RichText::new("Initial carrier inspection").strong());
+                ui.label(
+                    RichText::new("Signed envelope verified. Shard health before any damage:")
+                        .color(MUTED),
+                );
+                for g in &insp.groups {
+                    let missing_data = g.missing_shards.iter().filter(|&&index| index < g.data_shards).count();
+                    let missing_parity = g.missing_shards.iter().filter(|&&index| index >= g.data_shards).count();
+                    let bad = g.missing_shards.len();
+                    let kind = if g.index + 1 < insp.groups.len() { "full" } else { "tail" };
+                    let status = if g.recoverable { "✓ recoverable" } else { "✗ not recoverable" };
+                    ui.label(format!(
+                        "Group {} ({kind}): {}/{} data, {}/{} parity — {} missing/bad — {status}",
+                        g.index,
+                        g.data_shards - missing_data,
+                        g.data_shards,
+                        g.parity_shards - missing_parity,
+                        g.parity_shards,
+                        bad,
+                    ));
+                }
+                ui.label(format!(
+                    "Overall: {} — {} bytes ciphertext",
+                    if insp.recoverable { "all groups recoverable" } else { "some groups not recoverable" },
+                    insp.ciphertext_bytes
+                ));
+            });
+            ui.add_space(8.0);
+        }
+
+        // Damaged inspection + 5-erasure evidence.
+        if let Some(insp) = &snap.inspection_after_damage {
+            surface(ui, |ui| {
+                ui.label(RichText::new("Inspection after damage").strong());
+                ui.label(
+                    RichText::new(
+                        "2 data shards missing (deleted), 2 parity shards hash-bad (XOR corrupted). \
+                         4 erasures — within repair budget.",
+                    )
+                    .color(AMBER),
+                );
+                if !snap.damaged_shard_indices.is_empty() {
+                    ui.label(format!("Damaged shard indices: {:?}", snap.damaged_shard_indices));
+                }
+                for g in &insp.groups {
+                    let missing_data = g.missing_shards.iter().filter(|&&index| index < g.data_shards).count();
+                    let missing_parity = g.missing_shards.iter().filter(|&&index| index >= g.data_shards).count();
+                    let bad = g.missing_shards.len();
+                    let status = if g.recoverable { "✓ recoverable" } else { "✗ NOT recoverable" };
+                    ui.label(format!(
+                        "Group {}: {}/{} data, {}/{} parity — {} erasures — {status}",
+                        g.index, g.data_shards - missing_data, g.data_shards,
+                        g.parity_shards - missing_parity, g.parity_shards, bad,
+                    ));
+                }
+            });
+            ui.add_space(4.0);
+        }
+
+        // 5-erasure refusal evidence.
+        if let Some(insp5) = &snap.five_erasure_refusal_evidence {
+            surface(ui, |ui| {
+                ui.label(
+                    RichText::new("5-erasure receive refused (over budget)")
+                        .strong()
+                        .color(RED),
+                );
+                if let Some(err) = &snap.five_erasure_receive_error {
+                    ui.label(RichText::new(err).color(RED));
+                }
+                ui.label(
+                    RichText::new(
+                        "Temporarily adding a 5th erasure (shard 2) caused a refusal. \
+                         Shard 2 was then restored, bringing erasures back to 4.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+                for g in &insp5.groups {
+                    let bad = g.missing_shards.len();
+                    let status = if g.recoverable { "within budget" } else { "OVER BUDGET — refused" };
+                    ui.label(format!("Group {}: {} erasures — {status}", g.index, bad));
+                }
+            });
+            ui.add_space(4.0);
+        }
+
+        // Repaired shard count (after receive).
+        if let Some(repaired) = snap.repaired_shards {
+            surface(ui, |ui| {
+                ui.label(RichText::new("Reed–Solomon repair").strong());
+                ui.label(format!("{repaired} shards reconstructed from parity."));
+            });
+            ui.add_space(4.0);
+        }
+
+        // File SHA-256 comparison.
+        if !snap.source_sha256.is_empty() {
+            surface(ui, |ui| {
+                ui.label(RichText::new("File integrity — SHA-256").strong());
+                let have_received = !snap.received_sha256.is_empty();
+                for (name, src_hash) in &snap.source_sha256 {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(name).strong());
+                    value(ui, "Source   SHA-256", src_hash);
+                    if have_received {
+                        if let Some(rcv_hash) = snap.received_sha256.get(name) {
+                            value(ui, "Received SHA-256", rcv_hash);
+                            let matches = src_hash == rcv_hash;
+                            let (mark, color) = if matches {
+                                ("✓ MATCH — cryptographic integrity verified", GREEN)
+                            } else {
+                                ("✗ MISMATCH", RED)
+                            };
+                            ui.label(RichText::new(mark).strong().color(color));
+                        }
+                    }
+                }
+                if !have_received {
+                    ui.label(
+                        RichText::new("Received hashes available after Bob receives the parcel.")
+                            .small()
+                            .color(MUTED),
+                    );
+                }
+            });
+            ui.add_space(8.0);
+        }
+
+        // Action button + export report.
+        let ctx = ui.ctx().clone();
+        let can_advance = !self.busy() && self.demo_session.is_some();
+
+        match snap.phase {
+            DemoPhase::Prepared => {
+                ui.add_space(4.0);
+                let btn = ui.add_enabled(can_advance, egui::Button::new(
+                    RichText::new("Damage carrier copy →").strong(),
+                ));
+                if btn.clicked() {
+                    if let Some(session) = self.demo_session.take() {
+                        self.start(&ctx, Action::DemoAdvance(session));
+                    }
+                }
+                ui.label(
+                    RichText::new(
+                        "Will delete 2 data shards, XOR-corrupt 2 parity shards, attempt a \
+                         5-erasure receive (expecting refusal), then restore shard 2.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+            }
+            DemoPhase::Damaged => {
+                ui.add_space(4.0);
+                let btn = ui.add_enabled(can_advance, egui::Button::new(
+                    RichText::new("Repair and receive →").strong(),
+                ));
+                if btn.clicked() {
+                    if let Some(session) = self.demo_session.take() {
+                        self.start(&ctx, Action::DemoAdvance(session));
+                    }
+                }
+                ui.label(
+                    RichText::new(
+                        "Bob's profile will repair the 4 erasures, decrypt and verify the batch, \
+                         then create a signed receipt ready for the return trip.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+            }
+            DemoPhase::Received => {
+                ui.add_space(4.0);
+                let btn = ui.add_enabled(can_advance, egui::Button::new(
+                    RichText::new("Carry back signed receipt →").strong(),
+                ));
+                if btn.clicked() {
+                    if let Some(session) = self.demo_session.take() {
+                        self.start(&ctx, Action::DemoAdvance(session));
+                    }
+                }
+                ui.label(
+                    RichText::new(
+                        "Bob's signed receipt is exported to the carrier, then Alice imports it. Delivery reaches Confirmed.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+            }
+            DemoPhase::Confirmed => {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(
+                        "Demo complete. All phases verified with the real cryptographic engine.",
+                    )
+                    .strong()
+                    .color(GREEN),
+                );
+                // Export report button — only when report_path populated and not busy.
+                if let Some(report_src) = snap.report_path.clone() {
+                    ui.add_space(4.0);
+                    let btn = ui.add_enabled(can_advance, egui::Button::new(
+                        RichText::new("Export JSON evidence report…").strong(),
+                    ));
+                    if btn.clicked() {
+                        if let Some(target) = rfd::FileDialog::new()
+                            .set_file_name("relaypost-demo-report.json")
+                            .save_file()
+                        {
+                            self.start(&ctx, Action::DemoCopyReport(report_src, target));
+                        }
+                    }
+                    ui.label(
+                        RichText::new("Save a copy of the JSON evidence report to a location of your choice.")
+                            .small()
+                            .color(MUTED),
+                    );
+                }
+            }
+        }
     }
 
     fn choose_parcel_export(&mut self, context: &egui::Context, id: &str) {
@@ -1069,6 +1509,9 @@ impl RelayApp {
         {
             self.start(context, Action::Refresh);
         }
+        if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::D)) {
+            self.switch_screen(Screen::Demo);
+        }
     }
 }
 
@@ -1088,10 +1531,12 @@ impl eframe::App for RelayApp {
                 egui::ScrollArea::vertical().id_salt("page").show(ui, |ui| {
                     self.messages(ui);
                     ui.add_enabled_ui(!self.busy(), |ui| match self.screen {
+                        Screen::Welcome => self.welcome_screen(ui),
                         Screen::Send => self.send_screen(ui),
                         Screen::Receive => self.receive_screen(ui),
                         Screen::History => self.history_screen(ui),
                         Screen::Identity => self.identity_screen(ui),
+                        Screen::Demo => self.demo_screen(ui),
                     });
                     ui.add_space(20.0);
                 });

@@ -1,8 +1,26 @@
 # Kiro development evidence
 
-The initial RelayPost implementation was developed with Codex. On 2026-11-02,
-a real Kiro CLI v2 session reviewed receive recovery and generated a regression
-candidate. Codex applied and simplified that candidate during review.
+The initial RelayPost implementation was developed with Codex. The guided-demo
+iteration used actual Kiro CLI sessions to author the specification first,
+amend it after review, and directly implement a useful shared engine, CLI
+command, first-use onboarding and staged desktop walkthrough. Codex configured
+the scoped agent, directed review, supplied independent tests, and handles final
+review amendments and delivery.
+
+The [guided-demo evidence](../.kiro/evidence/guided-demo.md) records the exact
+sessions, successful direct file writes, service-throttle interruptions and
+coauthorship boundary. Its real inputs are the
+[requirements](../.kiro/specs/guided-demo/requirements.md),
+[design](../.kiro/specs/guided-demo/design.md) and
+[tasks](../.kiro/specs/guided-demo/tasks.md), created by Kiro before implementation.
+The [project agent](../.kiro/agents/relaypost-product.json) exposes only file
+read/write tools and reads the project steering when directed; it cannot run
+local Rust commands. All Rust validation runs in GitHub Actions.
+
+## Earlier receive-recovery regression
+
+On 2026-11-02, a real Kiro CLI v2 session reviewed receive recovery and generated
+a regression candidate. Codex applied and simplified that candidate during review.
 
 | Evidence | Record |
 | --- | --- |

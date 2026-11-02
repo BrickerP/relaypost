@@ -8,7 +8,62 @@ artifact, not an installer or a verified public release.
 All Rust compilation, tests, formatting and Clippy checks run in GitHub Actions.
 These instructions only execute the prebuilt binaries.
 
-## Run the sample
+## Try the native guided demo
+
+1. Extract the candidate macOS bundle, verify the ZIP against its SHA-256 file,
+   and open `RelayPost.app` on an Apple Silicon Mac.
+2. Click **Try guided demo**, or **Demo → Run new guided demo**. No identity setup, password or
+   development toolchain is required. The app creates two disposable profiles
+   and 21 MiB of synthetic files in a new directory separate from its normal
+   profile. It displays that directory for inspection.
+3. Use **Damage carrier copy →**, **Repair and receive →**, then **Carry back
+   signed receipt →** to advance through **Prepared**, **Damaged**, **Received**
+   and **Confirmed**. Check the four repaired shards, matching SHA-256 values,
+   five-erasure receive refusal, and sender waiting until the signed receipt
+   returns. The final `demo-report.json` is generated automatically;
+   **Export JSON report…** copies it to a new chosen filename.
+
+The GUI and CLI call the same `relay-core::DemoSession`; this is a real
+cryptographic/file-system workflow with pauses between actual stages. It uses
+two profiles on one machine and a directory carrier. It is not a physical USB,
+two-device, performance or power-loss test.
+
+The bundled CLI runs all the same stages noninteractively:
+
+```sh
+/absolute/path/to/RelayPost.app/Contents/MacOS/relaypost \
+  demo --output /absolute/path/to/NEW-synthetic-demo --json
+```
+
+The output path must **not exist**, including as an empty directory. Existing
+output is neither overwritten nor resumed; a restart creates another fresh
+run. The demo command dispatches before opening the ordinary profile and ignores
+profile/password input. It emits a public-facts snapshot and writes the same
+JSON to `demo-report.json`. Synthetic private keys remain only in their
+disposable profiles, encrypted by clearly labeled fixture passphrases; neither
+passphrases nor private keys appear in the report.
+
+Source files remain in `source_files/`. Alice's retained outbox has the intact
+signed parcel. The carrier has two missing data shards and two corrupt parity
+shards in its first full 20+4 group. A temporary fifth erasure causes an actual
+receive refusal with no committed batch or success receipt; the fifth shard is
+then restored before the successful four-shard repair. Raw tar and encryption
+overhead affects the tail layout, so inspect its recorded budget rather than
+assuming one data shard per MiB of original input.
+
+At **Received**, Bob's published files and signed receipt exist, their hashes
+match the sources, and Alice remains **WaitingReceipt**. Advancing to
+**Confirmed** exports and verifies the return receipt. `export_report` is valid
+only after confirmation and refuses to replace an existing report. The JSON
+contains actual inspections, evidence paths, the five-erasure receive error,
+source/received hash maps, repaired count and sender state.
+
+For judge access, use the stable public release selected in the final
+submission. Actions artifacts are development evidence and can expire. See
+[English judge instructions](submission/TESTING.md) and the
+[candidate evidence record](submission/READINESS.md).
+
+## Independent command-line acceptance harness
 
 Unzip the artifact into a chosen directory, verify its checksum against the
 adjacent `.sha256` file, then run from the repository:
@@ -25,7 +80,7 @@ password file, and a static 21 MiB sample. It never loads your normal profile.
 The script uses `--password-file`; passwords are not command-line arguments or
 printed in the transcript. Treat the generated profiles as disposable fixtures.
 
-The script checks the entire real CLI chain:
+The script retains its independent checks of the real CLI chain:
 
 1. Initialize two identities, exchange self-signed contact cards, and explicitly
    pin the complete fingerprints. In a real exchange, first compare those
@@ -56,6 +111,12 @@ The script checks the entire real CLI chain:
 9. Damage a retained outgoing shard after confirmation. `recover` must preserve
    `Confirmed` while reporting `local_error`. Restore the exact original shard;
    recovery must clear the health error and retain confirmation.
+10. Run the product's shared `demo` command in a separate new root with an
+    unusable ordinary-profile path and nonexistent password file. Independently
+    hash the real source, received files and carrier shards, rebuild the intact
+    retained ciphertext to verify its ID, check the receipt binding and sender
+    index, and compare stdout with the immutable report. Reusing that output
+    must fail without replacing the report.
 
 `demo-report.json` records the actual group health, repaired count, original and
 received SHA-256 values, duplicate outcome, final sender state, and command exit
@@ -63,6 +124,10 @@ codes, plus the self-send, staged recovery, explicit discard and outgoing health
 checks. CI retains this report with its test logs. The report contains public
 identifiers and synthetic fixture paths; it contains no passwords or private
 keys.
+
+The harness is developer acceptance infrastructure. It does not provide a
+second product implementation of the guided journey; step 10 invokes the
+shared Rust engine and verifies its resulting bytes and public facts.
 
 The demonstration uses separate CLI processes on **one machine** and a directory
 as the carrier. It does not prove two-device interoperability, actual USB-media
@@ -97,12 +162,12 @@ The workflow has four independent concerns:
 
 | Job | Evidence |
 | --- | --- |
-| Resolve dependencies | Generates the initial `Cargo.lock` when absent; verifies committed locks with `--locked`; uploads the lock for review and commit. |
+| Resolve dependencies | Requires the committed `Cargo.lock`, verifies dependency resolution with `cargo metadata --locked`, and retains the lock and dependency inventory. |
 | Rust formatting | Runs `cargo fmt --all -- --check`. On failure, retains the failing status and uploads a `format.patch`; it never commits a fix. |
 | Linux core and CLI | Runs integration and unit tests, Clippy with warnings denied, and the actual CLI sample. |
 | macOS arm64 native application | Tests both real macOS publication semantics and the CLI, builds the native interface, checks its Clippy warnings, runs the release CLI sample, and packages the app with a SHA-256 file. |
 
-Build and test logs, reports, lockfile and app artifacts are retained for 30 days.
+Build and test logs, reports, lockfile and app artifacts are retained for 90 days.
 No workflow merges, publishes a GitHub Release, or uploads signing credentials.
 The Linux job compiles only the core and CLI, so it does not require desktop
 X11/Wayland system packages. The native app is compiled on macOS.

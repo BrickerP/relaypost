@@ -1,0 +1,76 @@
+WEBVTT
+
+NOTE Planned 164-second native capture. Retiming and factual review required
+before publication. This file is not evidence of a finished video.
+
+00:00.000 --> 00:08.000
+What if two computers cannot be online together?
+RelayPost brings back store-and-forward.
+
+00:08.000 --> 00:17.000
+Prepare an encrypted parcel, carry it,
+and return proof of a verified save.
+This is the real native Mac app.
+
+00:17.000 --> 00:26.000
+The guided demo creates two disposable identities
+and 21 MiB of synthetic files in a new directory.
+
+00:26.000 --> 00:35.000
+One machine. A directory carrier.
+No physical USB or second computer is demonstrated.
+
+00:35.000 --> 00:43.000
+The sender exported a real encrypted, signed parcel:
+20 data shards and 4 parity shards in the first group.
+
+00:43.000 --> 00:51.000
+The smaller tail has its own budget.
+Exported still means waiting for a receipt.
+
+00:51.000 --> 01:02.000
+Two data shards and two parity shards are damaged.
+Their hashes expose all four erasures.
+This group remains repairable.
+
+01:02.000 --> 01:15.000
+A separate five-erasure receive attempt is refused:
+no committed batch and no success receipt.
+The evidence remains; the fifth shard is restored.
+
+01:15.000 --> 01:29.000
+The production engine reconstructs ciphertext,
+checks its digest, decrypts and validates the files,
+then publishes a complete batch.
+
+01:29.000 --> 01:43.000
+Four repaired shards. Actual source and received
+SHA-256 values match. The receiver has saved the files.
+The sender is still waiting.
+
+01:43.000 --> 01:55.000
+Now the signed receipt returns. The sender checks
+the expected recipient and parcel binding,
+then becomes Confirmed.
+
+01:55.000 --> 02:05.000
+Carried, repaired, saved and confirmed are separate facts.
+A receipt proves this save, not readership or permanence.
+
+02:05.000 --> 02:16.000
+CLI and GUI share one Rust demo engine.
+The report preserves real inspections,
+repaired counts, hashes and states.
+
+02:16.000 --> 02:25.000
+UUCP inspired the workflow; NNCP remains a modern baseline.
+RelayPost brings the handoff into one native journey.
+
+02:25.000 --> 02:35.000
+Actual Kiro CLI specifications and implementation records
+are linked in the repository. The initial product used Codex.
+
+02:35.000 --> 02:44.000
+Rust builds and tests run in GitHub Actions.
+Two-device, physical-media testing and an easier
+signed installation remain future work.
