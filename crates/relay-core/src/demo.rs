@@ -427,8 +427,8 @@ impl DemoSession {
         }
         let mut reported = self.snapshot.clone();
         reported.report_path = Some(report_path.clone());
-        let json = serde_json::to_vec_pretty(&reported)
-            .context("failed to serialize demo snapshot")?;
+        let json =
+            serde_json::to_vec_pretty(&reported).context("failed to serialize demo snapshot")?;
         crate::fsutil::write_new(&report_path, &json)?;
         crate::fsutil::sync_dir(&self.root)?;
         self.snapshot = reported;

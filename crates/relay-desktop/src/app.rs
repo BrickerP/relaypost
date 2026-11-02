@@ -1059,7 +1059,10 @@ impl RelayApp {
         ui.horizontal(|ui| {
             ui.label(RichText::new("2 generated files / 21 MiB (20 + 1 MiB)").color(MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.add_enabled(!self.busy(), egui::Button::new("Run new guided demo")).clicked() {
+                if ui
+                    .add_enabled(!self.busy(), egui::Button::new("Run new guided demo"))
+                    .clicked()
+                {
                     let ctx = ui.ctx().clone();
                     self.start_demo(&ctx);
                 }
@@ -1079,11 +1082,20 @@ impl RelayApp {
             DemoPhase::Confirmed => 3,
         };
         ui.horizontal_wrapped(|ui| {
-            for (index, label) in ["1  Prepared", "2  Damaged", "3  Received", "4  Confirmed"].iter().enumerate() {
+            for (index, label) in ["1  Prepared", "2  Damaged", "3  Received", "4  Confirmed"]
+                .iter()
+                .enumerate()
+            {
                 if index > 0 {
                     ui.label(RichText::new("->").color(MUTED));
                 }
-                let color = if index == phase_number { TEAL } else if index < phase_number { GREEN } else { MUTED };
+                let color = if index == phase_number {
+                    TEAL
+                } else if index < phase_number {
+                    GREEN
+                } else {
+                    MUTED
+                };
                 ui.label(RichText::new(*label).strong().color(color));
             }
         });
@@ -1106,7 +1118,11 @@ impl RelayApp {
             }
             ui.label(RichText::new(description).small().color(MUTED));
         } else {
-            ui.label(RichText::new("Delivery confirmed by Bob's signed receipt.").strong().color(GREEN));
+            ui.label(
+                RichText::new("Delivery confirmed by Bob's signed receipt.")
+                    .strong()
+                    .color(GREEN),
+            );
             if let Some(report_src) = snap.report_path.clone() {
                 if primary(ui, "Export JSON evidence report...", can_advance).clicked() {
                     if let Some(target) = rfd::FileDialog::new()
@@ -1116,7 +1132,13 @@ impl RelayApp {
                         self.start(&ctx, Action::DemoCopyReport(report_src, target));
                     }
                 }
-                ui.label(RichText::new("The JSON evidence report is unsigned. The delivery receipt is signed.").small().color(MUTED));
+                ui.label(
+                    RichText::new(
+                        "The JSON evidence report is unsigned. The delivery receipt is signed.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
             }
         }
         if !self.busy() && self.demo_session.is_none() {
@@ -1126,38 +1148,81 @@ impl RelayApp {
 
         surface(ui, |ui| {
             ui.columns(2, |columns| {
-                columns[0].label(RichText::new("ALICE / SENDER").small().strong().color(MUTED));
+                columns[0].label(
+                    RichText::new("ALICE / SENDER")
+                        .small()
+                        .strong()
+                        .color(MUTED),
+                );
                 if let Some(state) = &snap.sender_state {
                     state_badge(&mut columns[0], state);
                 }
-                columns[1].label(RichText::new("BOB / RECIPIENT").small().strong().color(MUTED));
+                columns[1].label(
+                    RichText::new("BOB / RECIPIENT")
+                        .small()
+                        .strong()
+                        .color(MUTED),
+                );
                 if let Some(repaired) = snap.repaired_shards {
-                    columns[1].label(RichText::new(format!("Batch saved / {repaired} shards repaired")).strong().color(GREEN));
-                    columns[1].label(if snap.phase == DemoPhase::Confirmed { "Signed receipt returned to Alice" } else { "Signed receipt ready for the return trip" });
+                    columns[1].label(
+                        RichText::new(format!("Batch saved / {repaired} shards repaired"))
+                            .strong()
+                            .color(GREEN),
+                    );
+                    columns[1].label(if snap.phase == DemoPhase::Confirmed {
+                        "Signed receipt returned to Alice"
+                    } else {
+                        "Signed receipt ready for the return trip"
+                    });
                 } else {
                     columns[1].label("Awaiting verified files");
                 }
             });
             if !snap.source_sha256.is_empty() && snap.source_sha256 == snap.received_sha256 {
-                ui.label(RichText::new(format!("MATCH / SHA-256 verified for all {} files", snap.source_sha256.len())).strong().color(GREEN));
+                ui.label(
+                    RichText::new(format!(
+                        "MATCH / SHA-256 verified for all {} files",
+                        snap.source_sha256.len()
+                    ))
+                    .strong()
+                    .color(GREEN),
+                );
             } else if !snap.received_sha256.is_empty() {
-                ui.label(RichText::new("MISMATCH / source and received SHA-256 maps differ").strong().color(RED));
+                ui.label(
+                    RichText::new("MISMATCH / source and received SHA-256 maps differ")
+                        .strong()
+                        .color(RED),
+                );
             }
         });
         ui.add_space(10.0);
 
         // Receiving repairs Bob's private output, never this damaged carrier copy.
-        let carrier_inspection = snap.inspection_after_damage.as_ref().or(snap.initial_inspection.as_ref());
+        let carrier_inspection = snap
+            .inspection_after_damage
+            .as_ref()
+            .or(snap.initial_inspection.as_ref());
         if let Some(inspection) = carrier_inspection {
             surface(ui, |ui| {
-                ui.label(RichText::new(if snap.inspection_after_damage.is_some() {
-                    "Carrier inspection after damage"
-                } else {
-                    "Carrier inspection before damage"
-                }).strong());
+                ui.label(
+                    RichText::new(if snap.inspection_after_damage.is_some() {
+                        "Carrier inspection after damage"
+                    } else {
+                        "Carrier inspection before damage"
+                    })
+                    .strong(),
+                );
                 for group in &inspection.groups {
-                    let missing_data = group.missing_shards.iter().filter(|&&index| index < group.data_shards).count();
-                    let missing_parity = group.missing_shards.iter().filter(|&&index| index >= group.data_shards).count();
+                    let missing_data = group
+                        .missing_shards
+                        .iter()
+                        .filter(|&&index| index < group.data_shards)
+                        .count();
+                    let missing_parity = group
+                        .missing_shards
+                        .iter()
+                        .filter(|&&index| index >= group.data_shards)
+                        .count();
                     ui.label(format!(
                         "Group {} / {}/{} data + {}/{} parity / {} unavailable / {}",
                         group.index,
@@ -1166,7 +1231,11 @@ impl RelayApp {
                         group.parity_shards - missing_parity,
                         group.parity_shards,
                         group.missing_shards.len(),
-                        if group.recoverable { "recoverable" } else { "over budget" },
+                        if group.recoverable {
+                            "recoverable"
+                        } else {
+                            "over budget"
+                        },
                     ));
                     ui.horizontal_wrapped(|ui| {
                         for index in 0..group.data_shards + group.parity_shards {
@@ -1179,13 +1248,18 @@ impl RelayApp {
                             } else {
                                 Color32::from_rgb(81, 155, 137)
                             };
-                            let (rect, response) = ui.allocate_exact_size(egui::vec2(23.0, 26.0), egui::Sense::hover());
+                            let (rect, response) = ui
+                                .allocate_exact_size(egui::vec2(23.0, 26.0), egui::Sense::hover());
                             ui.painter().rect_filled(rect.shrink(1.0), 3, fill);
                             response.on_hover_text(format!(
                                 "Group {} / shard {index} / {} / {}",
                                 group.index,
                                 if parity { "parity" } else { "data" },
-                                if missing { "missing or hash mismatch" } else { "digest verified" },
+                                if missing {
+                                    "missing or hash mismatch"
+                                } else {
+                                    "digest verified"
+                                },
                             ));
                         }
                     });
@@ -1201,9 +1275,27 @@ impl RelayApp {
         if let Some(inspection) = &snap.five_erasure_refusal_evidence {
             surface(ui, |ui| {
                 let refused = snap.five_erasure_receive_error.is_some() && !inspection.recoverable;
-                ui.label(RichText::new(if refused { "5-erasure receive refused / over budget" } else { "5-erasure inspection evidence" }).strong().color(if refused { RED } else { MUTED }));
+                ui.label(
+                    RichText::new(if refused {
+                        "5-erasure receive refused / over budget"
+                    } else {
+                        "5-erasure inspection evidence"
+                    })
+                    .strong()
+                    .color(if refused { RED } else { MUTED }),
+                );
                 for group in &inspection.groups {
-                    ui.label(format!("Group {}: {} unavailable / repair budget {} / {}", group.index, group.missing_shards.len(), group.parity_shards, if group.recoverable { "recoverable" } else { "over budget" }));
+                    ui.label(format!(
+                        "Group {}: {} unavailable / repair budget {} / {}",
+                        group.index,
+                        group.missing_shards.len(),
+                        group.parity_shards,
+                        if group.recoverable {
+                            "recoverable"
+                        } else {
+                            "over budget"
+                        }
+                    ));
                 }
                 ui.label(RichText::new("Shard 2 was restored after this attempt, leaving four erasures for the next receive.").small().color(MUTED));
                 if let Some(error) = &snap.five_erasure_receive_error {
@@ -1217,21 +1309,39 @@ impl RelayApp {
 
         egui::CollapsingHeader::new("File SHA-256 evidence")
             .id_salt(("demo_hashes", &snap.root, phase_number))
-            .default_open(matches!(snap.phase, DemoPhase::Received | DemoPhase::Confirmed))
+            .default_open(matches!(
+                snap.phase,
+                DemoPhase::Received | DemoPhase::Confirmed
+            ))
             .show(ui, |ui| {
                 for (name, source) in &snap.source_sha256 {
                     ui.label(RichText::new(name).strong());
                     value(ui, "Source SHA-256", source);
                     if let Some(received) = snap.received_sha256.get(name) {
                         value(ui, "Received SHA-256", received);
-                        ui.label(RichText::new(if source == received { "MATCH" } else { "MISMATCH" }).color(if source == received { GREEN } else { RED }));
+                        ui.label(
+                            RichText::new(if source == received {
+                                "MATCH"
+                            } else {
+                                "MISMATCH"
+                            })
+                            .color(if source == received {
+                                GREEN
+                            } else {
+                                RED
+                            }),
+                        );
                     } else {
                         ui.label(RichText::new("Not received yet").color(MUTED));
                     }
                 }
             });
         ui.collapsing("Demo files and evidence", |ui| {
-            value(ui, "Demo root (old runs are preserved)", &snap.root.display().to_string());
+            value(
+                ui,
+                "Demo root (old runs are preserved)",
+                &snap.root.display().to_string(),
+            );
             if let Some(path) = &snap.carrier_parcel_path {
                 value(ui, "Carrier parcel", &path.display().to_string());
             }
@@ -1242,7 +1352,11 @@ impl RelayApp {
                 value(ui, "Signed receipt", &path.display().to_string());
             }
             if let Some(path) = &snap.report_path {
-                value(ui, "JSON evidence report (unsigned)", &path.display().to_string());
+                value(
+                    ui,
+                    "JSON evidence report (unsigned)",
+                    &path.display().to_string(),
+                );
             }
         });
     }
