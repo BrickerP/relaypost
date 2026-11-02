@@ -30,7 +30,7 @@ access. Use a stable release download for the functioning macOS application.
 | Actual recording | TBD — file, duration, binary digest and commit |
 | Public YouTube URL | TBD — only after upload approval |
 | Public source visibility | TBD — verify after visibility approval |
-| Actual Kiro evidence | [Usage record](../KIRO_USAGE.md); guided-demo evidence TBD |
+| Actual Kiro evidence | [Usage record](../KIRO_USAGE.md) and [guided-demo session record](../../.kiro/evidence/guided-demo.md) |
 | Judge instructions | [TESTING.md](TESTING.md), verify exact labels |
 | English description | [DEVPOST.md](DEVPOST.md), resolve every TBD |
 

@@ -9,14 +9,14 @@ not required to try the prebuilt app.
    release URL**. Verify the ZIP's checksum, extract it and open `RelayPost.app`.
    If macOS blocks it, review the normal Privacy & Security prompt for this app;
    do not disable system-wide security protections.
-2. Click **Try guided demo** on the welcome screen, or **Demo → Run new guided
+2. Click **Try guided demo** on the welcome screen, or **Demo > Run new guided
    demo**. The app creates and shows a **new** output directory. At **Prepared**,
-   inspect the parcel and group health, then click **Damage carrier copy →**.
+   inspect the parcel and group health, then click **Damage carrier copy ->**.
    The demo creates its own isolated identities; no identity setup or password
    from the judge is needed.
-3. Inspect the five-shard refusal, then click **Repair and receive →**. Confirm
+3. Inspect the five-shard refusal, then click **Repair and receive ->**. Confirm
    four repaired shards and matching SHA-256 values, with the sender still
-   **WaitingReceipt**. Click **Carry back signed receipt →** to reach
+   **WaitingReceipt**. Click **Carry back signed receipt ->** to reach
    **Confirmed**. The generated `demo-report.json` records the same facts;
    **Export JSON report…** copies it to a new chosen filename.
 

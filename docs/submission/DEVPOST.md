@@ -87,13 +87,20 @@ recovery regression candidate that Codex applied and simplified. See
 [the session evidence](../../.kiro/evidence/indexed-deletion-regression.md) and
 [the Kiro usage record](../KIRO_USAGE.md).
 
-The guided-demo iteration uses Kiro specification and implementation work to
-make the user journey reproducible in the shared core. Before submitting,
-replace this paragraph with the final session IDs, generated files, review
-adjustments and exact validated commit in the Kiro usage record. **TBD: verified
-guided-demo Kiro evidence.** Steering and specification files alone are not proof
-that a Kiro session used them. No IDE, Crew, hook, model or MCP use is claimed
-without the corresponding observed record.
+For the guided-demo iteration, an actual repository-local Kiro CLI agent used
+read/write tools to inspect the existing code, write steering and a three-part
+specification, then implement the shared engine, CLI command and staged native
+interface. The strategy was to review the specification first, especially the
+receipt boundary and real failure evidence, then have Kiro implement that
+contract through existing core and worker APIs. Independent Codex workers wrote
+acceptance tests and release tooling. Kiro service throttling interrupted some
+sessions; Codex made the final safety and presentation corrections. Those edits
+remain credited to Codex.
+
+[The guided-demo evidence](../../.kiro/evidence/guided-demo.md) identifies each
+actual session, direct file writes, interrupted work and review amendments.
+Root `.kiro/` contains the agent, steering and specs used in that work. No IDE,
+Crew, hook, model or MCP use is claimed; this agent's tools were read/write only.
 
 ## Challenges and lessons
 
@@ -127,7 +134,8 @@ Kiro CLI, Codex, GitHub Actions.
 - Demonstration: **TBD: public YouTube URL, under three minutes**.
 - Candidate commit and successful CI: **TBD: exact commit and run URL**.
 - English testing instructions: [TESTING.md](TESTING.md).
-- Development evidence: [KIRO_USAGE.md](../KIRO_USAGE.md).
+- Development evidence: [KIRO_USAGE.md](../KIRO_USAGE.md) and
+  [guided-demo sessions](../../.kiro/evidence/guided-demo.md).
 
 ## Current limits
 

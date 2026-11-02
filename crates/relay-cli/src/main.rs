@@ -385,14 +385,19 @@ fn run_demo(json: bool, output: &Path) -> Result<()> {
     // --- Phase: Received --------------------------------------------------
     let snap = session.advance().context("advance to Received")?;
     print_unless_json!("\n=== Phase: Received ===");
-    print_unless_json!(
-        "Repaired shards: {}",
-        snap.repaired_shards.unwrap_or(0),
-    );
+    print_unless_json!("Repaired shards: {}", snap.repaired_shards.unwrap_or(0),);
     print_unless_json!("Source vs received SHA-256:");
     for (name, src_hash) in &snap.source_sha256 {
-        let rcv_hash = snap.received_sha256.get(name).map(String::as_str).unwrap_or("<missing>");
-        let status = if src_hash == rcv_hash { "MATCH" } else { "MISMATCH" };
+        let rcv_hash = snap
+            .received_sha256
+            .get(name)
+            .map(String::as_str)
+            .unwrap_or("<missing>");
+        let status = if src_hash == rcv_hash {
+            "MATCH"
+        } else {
+            "MISMATCH"
+        };
         print_unless_json!("  {:<12}  {}  {}", name, status, src_hash);
     }
     if let Some(state) = &snap.sender_state {

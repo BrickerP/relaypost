@@ -12,11 +12,11 @@ These instructions only execute the prebuilt binaries.
 
 1. Extract the candidate macOS bundle, verify the ZIP against its SHA-256 file,
    and open `RelayPost.app` on an Apple Silicon Mac.
-2. Click **Try guided demo**, or **Demo → Run new guided demo**. No identity setup, password or
+2. Click **Try guided demo**, or **Demo > Run new guided demo**. No identity setup, password or
    development toolchain is required. The app creates two disposable profiles
    and 21 MiB of synthetic files in a new directory separate from its normal
    profile. It displays that directory for inspection.
-3. Use **Damage carrier copy →**, **Repair and receive →**, then **Carry back
+3. Use **Damage carrier copy ->**, **Repair and receive ->**, then **Carry back
    signed receipt →** to advance through **Prepared**, **Damaged**, **Received**
    and **Confirmed**. Check the four repaired shards, matching SHA-256 values,
    five-erasure receive refusal, and sender waiting until the signed receipt

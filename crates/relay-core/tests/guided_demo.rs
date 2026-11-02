@@ -22,7 +22,10 @@ fn tree(root: &Path) -> BTreeMap<PathBuf, String> {
         for entry in fs::read_dir(directory).unwrap() {
             let entry = entry.unwrap();
             let kind = entry.file_type().unwrap();
-            assert!(!kind.is_symlink(), "synthetic evidence must not escape its root");
+            assert!(
+                !kind.is_symlink(),
+                "synthetic evidence must not escape its root"
+            );
             if kind.is_dir() {
                 visit(root, &entry.path(), entries);
             } else {
@@ -212,9 +215,12 @@ fn guided_demo_reports_real_bytes_and_receipt_gated_delivery() {
     for group in groups {
         assert!(observed_erasures(pristine, group).is_empty());
         let mut data = Vec::new();
-        for shard in group["shards"].as_array().unwrap().iter().take(
-            group["data_shards"].as_u64().unwrap() as usize,
-        ) {
+        for shard in group["shards"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .take(group["data_shards"].as_u64().unwrap() as usize)
+        {
             data.extend(fs::read(pristine.join(shard["path"].as_str().unwrap())).unwrap());
         }
         data.truncate(group["bytes"].as_u64().unwrap() as usize);
@@ -236,15 +242,24 @@ fn guided_demo_reports_real_bytes_and_receipt_gated_delivery() {
     assert_eq!(damaged.phase, DemoPhase::Damaged);
     let actual_erasures = observed_erasures(carrier, &groups[0]);
     assert_eq!(actual_erasures.len(), 4);
-    assert_eq!(actual_erasures.iter().filter(|&&index| index < 20).count(), 2);
-    assert_eq!(actual_erasures.iter().filter(|&&index| index >= 20).count(), 2);
+    assert_eq!(
+        actual_erasures.iter().filter(|&&index| index < 20).count(),
+        2
+    );
+    assert_eq!(
+        actual_erasures.iter().filter(|&&index| index >= 20).count(),
+        2
+    );
     assert_eq!(actual_erasures, damaged.damaged_shard_indices);
     for &index in &actual_erasures {
         let path = carrier.join(groups[0]["shards"][index]["path"].as_str().unwrap());
         if index < 20 {
             assert!(!path.exists(), "the two damaged data shards must be absent");
         } else {
-            assert!(path.is_file(), "bad parity shards remain present for hash checking");
+            assert!(
+                path.is_file(),
+                "bad parity shards remain present for hash checking"
+            );
         }
     }
     let four = damaged.inspection_after_damage.as_ref().unwrap();
@@ -264,14 +279,19 @@ fn guided_demo_reports_real_bytes_and_receipt_gated_delivery() {
         .is_some_and(|error| !error.is_empty()));
 
     // A failed real receive cannot advance the phase or manufacture a receipt.
-    let extra_index = (0..20).find(|index| !actual_erasures.contains(index)).unwrap();
+    let extra_index = (0..20)
+        .find(|index| !actual_erasures.contains(index))
+        .unwrap();
     let extra_relative = groups[0]["shards"][extra_index]["path"].as_str().unwrap();
     let extra_carrier = carrier.join(extra_relative);
     let correct_extra = fs::read(&extra_carrier).unwrap();
     fs::remove_file(&extra_carrier).unwrap();
     assert!(session.advance().is_err());
     assert_eq!(session.snapshot().phase, DemoPhase::Damaged);
-    assert_eq!(serde_json::to_value(session.snapshot()).unwrap(), damaged_json);
+    assert_eq!(
+        serde_json::to_value(session.snapshot()).unwrap(),
+        damaged_json
+    );
     assert!(bob.deliveries().unwrap().is_empty());
     assert_eq!(outgoing(&alice).state, DeliveryState::WaitingReceipt);
     fs::write(&extra_carrier, correct_extra).unwrap();
@@ -312,7 +332,11 @@ fn guided_demo_reports_real_bytes_and_receipt_gated_delivery() {
     assert!(session.advance().is_err());
     assert!(session.export_report().is_err());
     assert!(DemoSession::start(root.clone()).is_err());
-    assert_eq!(tree(&root), final_tree, "rejected reuse must preserve all evidence");
+    assert_eq!(
+        tree(&root),
+        final_tree,
+        "rejected reuse must preserve all evidence"
+    );
     assert_eq!(tree(&normal_home), normal_before);
 
     // Starting again means a fresh run, never resuming or replacing old output.

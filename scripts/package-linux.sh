@@ -13,7 +13,7 @@ python3 scripts/release-metadata.py prepare --target x86_64-unknown-linux-gnu --
 mkdir "$package/bin"
 cp "$binary_dir/relaypost" "$package/bin/relaypost"
 python3 scripts/release-metadata.py checksums "$package"
-bash scripts/verify-package.sh "$package" "${GITHUB_SHA:-$(git rev-parse HEAD)}"
+bash scripts/verify-package.sh "$package" "${RELAYPOST_SOURCE_SHA:-$(git rev-parse HEAD)}"
 archive="$output_dir/$name.tar.gz"
 test ! -e "$archive"
 source_time="$(git show -s --format=%ct HEAD)"

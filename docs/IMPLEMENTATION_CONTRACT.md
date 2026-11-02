@@ -79,6 +79,13 @@ Export these types at crate root. Fingerprints are full stable fingerprints of t
 
 ## Interface behavior
 
+The guided onboarding/demo extension has one shared `DemoSession` engine in
+`relay-core`, reused by noninteractive CLI and staged desktop actions. Its exact
+public DTO, four phases, isolation and evidence requirements are defined in
+[the used Kiro specification](../.kiro/specs/guided-demo/design.md). Every demo
+run uses a fresh private root, synthetic profiles and real production APIs.
+The JSON report is an unsigned evidence summary; the return receipt is signed.
+
 Use English UI and help, 4 screens: Send, Receive, History, Identity & Contacts. Show real group health and outcomes, no fake progress/results. Keep expensive work off the UI thread.
 
 CLI shape: global --home; identity init/export, contacts import/trust/list, seal --to, export --carrier, inspect, receive, receipt export/import, deliveries, recover, cancel. `recover --discard-incomplete` performs only explicit staging discard and prints `discarded_staging`; no password is needed. Desktop discard requires a confirmation dialog. History selections use `(parcel_id, direction)` and show local-copy health separately. Password through masked interactive input, --password-stdin, or a password file; never a plaintext password argument. Structured --json output must not contain secrets.

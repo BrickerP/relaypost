@@ -24,9 +24,19 @@ Every extracted distribution also has a per-file `SHA256SUMS`. The macOS app's
 resources retain provenance, guides and dependency notices. CI gathers license
 expressions and supplied license/notice files from the actual resolved Cargo
 metadata for each target, walking normal and build dependencies and excluding
-development-only edges. The inventory may include build-time tools. It explicitly
-lists any crate that supplies no license file; review those pinned sources before
-public redistribution. Rust standard-library/toolchain licensing also applies to
+development-only edges. The inventory may include build-time tools and does not
+assert that every listed crate is statically linked. Nested font notices are
+included; CI requires the four bundled font notice files. Where published crates
+omit their workspace license texts, `third-party/catalog.json` supplies checked-in
+copies from exact upstream commits or checksum-pinned published crates. If an old
+upstream declares a license but supplies no standalone text, its original
+declaration and actual author metadata accompany the primary canonical license
+text; no copyright holder or year is invented. These evidence kinds are explicit
+in the catalog and packaged inventory. Packaging verifies catalog text hashes and
+crate checksums against `Cargo.lock`, preserves original copyright notices,
+records provenance, and fails if a dependency has neither provided nor catalogued
+notices. Canonical terms require a pinned upstream declaration as well. This is
+attribution material, not an independent legal audit. Rust standard-library/toolchain licensing also applies to
 the compiler's runtime components; the installed toolchain's `COPYRIGHT-library.html`,
 toolchain copyright inventory and associated license texts are retained under
 `licenses/rust-toolchain/`, following the [Rust distribution layout](https://doc.rust-lang.org/nightly/nightly-rustc/src/bootstrap/core/build_steps/dist.rs.html).
@@ -55,15 +65,20 @@ bytes; it is not an independent publisher signature.
    `relaypost-0.2.0-candidate`. Platform jobs extract the final compressed bytes,
    verify every payload file, check executable paths and run `--version` again;
    macOS additionally checks the bundle signature and plist version.
-3. For a deliverable candidate, use a `workflow_dispatch` run on the reviewed
-   branch commit, or the `main` push after a reviewed merge. PR-triggered runs
-   commonly build a synthetic merge commit; their `GITHUB_SHA` is intentionally
-   recorded and must not be confused with the branch's head SHA. The chosen
-   source SHA must be the same one in both `*.RELEASE.json` files and the tag.
+3. Every job explicitly checks out the PR's exact head SHA, or the event commit
+   for non-PR runs. `RELAYPOST_SOURCE_SHA` carries that expected commit without
+   overriding GitHub's own variables. Packaging reads `git rev-parse HEAD` and
+   refuses a mismatch; the archive verifier and final assembly require the same
+   SHA. A successful exact-head PR build is therefore a valid deliverable
+   candidate before merging. Use that full reviewed head SHA for both source
+   manifests and the eventual draft/tag target, rather than GitHub's synthetic
+   PR merge `GITHUB_SHA`. A manual `workflow_dispatch` build of the reviewed
+   commit is optional once this workflow exists on the default branch; it is
+   not a prerequisite for validating or preparing exact-head PR build assets.
 4. Download the complete candidate, verify it on the target machine, and record
    the successful run URL, exact source SHA, asset filenames and checksum values
    in the owner-reviewed release notes. Exercise opening the downloaded app with
-   normal macOS approval and the UI's **Try Demo** from the actual archive. Record
+   normal macOS approval and the UI's **Try guided demo** from the actual archive. Record
    any validation that has not been performed instead of inferring it from tests.
 
 All uploaded Actions artifacts request **90-day retention**, the public-repository

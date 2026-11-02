@@ -16,6 +16,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  RELAYPOST_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   dependencies:
@@ -26,13 +27,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
       - name: Read the single workspace release version
         id: version
-        run: echo "version=$(python3 scripts/release-metadata.py version)" >> "$GITHUB_OUTPUT"
+        run: |
+          test "$(git rev-parse HEAD)" = "$RELAYPOST_SOURCE_SHA"
+          echo "version=$(python3 scripts/release-metadata.py version)" >> "$GITHUB_OUTPUT"
       - name: Verify the committed lockfile
         shell: bash
         run: |
@@ -58,6 +63,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -86,6 +93,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -129,7 +138,7 @@ jobs:
           bash scripts/package-linux.sh target/release dist ci-logs/release-metadata.json 2>&1 | tee ci-logs/package.log
           verify_dir="$(mktemp -d)"
           tar -xzf dist/*.tar.gz -C "$verify_dir"
-          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-linux-x86_64" "$GITHUB_SHA" 2>&1 | tee ci-logs/archive-verification.log
+          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-linux-x86_64" "$RELAYPOST_SOURCE_SHA" 2>&1 | tee ci-logs/archive-verification.log
       - uses: actions/upload-artifact@v4
         with:
           name: relaypost-linux-x86_64
@@ -156,6 +165,8 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: '12.0'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -212,7 +223,7 @@ jobs:
           bash scripts/package-macos.sh target/release dist ci-logs/release-metadata.json 2>&1 | tee ci-logs/package.log
           verify_dir="$(mktemp -d)"
           ditto -x -k dist/*.zip "$verify_dir"
-          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64" "$GITHUB_SHA" 2>&1 | tee ci-logs/archive-verification.log
+          bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64" "$RELAYPOST_SOURCE_SHA" 2>&1 | tee ci-logs/archive-verification.log
       - uses: actions/upload-artifact@v4
         with:
           name: relaypost-macos-arm64
@@ -236,6 +247,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -249,21 +262,23 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os
+          import json, os, subprocess
           from pathlib import Path
           version = '${{ needs.dependencies.outputs.version }}'
           directory = Path('candidate')
+          source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert source_sha == os.environ['RELAYPOST_SOURCE_SHA']
           for platform, suffix in [('macos-arm64', '.zip'), ('linux-x86_64', '.tar.gz')]:
               name = f'relaypost-{version}-{platform}'
               assert (directory / (name + suffix)).is_file()
               manifest = json.loads((directory / (name + '.RELEASE.json')).read_text())
-              assert manifest['source_sha'] == os.environ['GITHUB_SHA']
+              assert manifest['source_sha'] == source_sha
               assert manifest['version'] == version
               assert manifest['platform'] == platform
           PY
           (cd candidate && sha256sum --check *.sha256 && sha256sum *.zip *.tar.gz *.RELEASE.json > SHA256SUMS)
           cp docs/RELEASE.md candidate/RELEASE.md
-          printf 'Checked RelayPost %s candidate from %s. No GitHub Release was published.\n' '${{ needs.dependencies.outputs.version }}' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Checked RelayPost %s candidate from %s. No GitHub Release was published.\n' '${{ needs.dependencies.outputs.version }}' "$RELAYPOST_SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: relaypost-${{ needs.dependencies.outputs.version }}-candidate

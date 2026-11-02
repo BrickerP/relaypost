@@ -22,7 +22,7 @@ needed to run the packages. See the [three-step installation guide](docs/INSTALL
 2. Verify the archive, extract it and run its included `verify-package.sh` as shown
    in the installation guide. On macOS, move `RelayPost.app` into Applications and
    open it using the normal macOS approval flow if prompted.
-3. Choose **Try Demo** in the app, or run `relaypost demo --output NEW_DIRECTORY`.
+3. Choose **Try guided demo** in the app, or run `relaypost demo --output NEW_DIRECTORY`.
    The shared Rust core takes two disposable synthetic identities through
    sealing, damaged-carrier inspection, repair and a signed return receipt.
 

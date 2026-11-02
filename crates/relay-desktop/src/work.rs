@@ -298,7 +298,12 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
                 .write(true)
                 .create_new(true)
                 .open(&target)
-                .with_context(|| format!("Cannot create target (file may already exist): {}", target.display()))?;
+                .with_context(|| {
+                    format!(
+                        "Cannot create target (file may already exist): {}",
+                        target.display()
+                    )
+                })?;
             io::copy(&mut src, &mut dst)
                 .with_context(|| format!("Error copying report to {}", target.display()))?;
             dst.sync_all()

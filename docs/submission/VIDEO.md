@@ -34,9 +34,10 @@ recording before upload.
 | 02:05–02:25 | Export/show actual JSON report path; keep real native results visible. | “The command line and this interface share one Rust demo engine. The report preserves its real inspections, repaired count, hashes and states. UUCP inspired the workflow; NNCP and repair tools remain modern baselines. RelayPost's experiment is bringing the complete handoff into one native journey.” |
 | 02:25–02:44 | Keep completed app visible; show brief link card for actual Kiro evidence, exact CI and repository. | “Kiro CLI contributed specifications and implementation work, with the actual session records and review changes linked in the repository. The initial product used Codex. All Rust builds and tests run in GitHub Actions. This prototype still needs two-device and physical-media testing, and an easier signed installation.” |
 
-The final Kiro sentence is conditional on the guided-demo session actually
-producing the recorded specification and implementation. If its evidence differs,
-rewrite that sentence and captions to match [KIRO_USAGE.md](../KIRO_USAGE.md).
+The Kiro sentence is supported by the
+[actual guided-demo sessions](../../.kiro/evidence/guided-demo.md). Keep Codex's
+initial authorship and final review amendments visible in the linked usage
+record; do not imply Kiro wrote all code or that a throttled session completed.
 Use only first-party footage, original voice or an authorized narration voice,
 and no unlicensed background music. A silent cut may use these English captions.
 

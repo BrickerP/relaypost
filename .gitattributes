@@ -1,0 +1,2 @@
+# Keep upstream legal text byte-for-byte, including its supplied EOF layout.
+third-party/licenses/** -text whitespace=-blank-at-eof

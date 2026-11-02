@@ -174,7 +174,10 @@ fn check_shard(path: &Path) -> Result<()> {
     crate::fsutil::no_symlink_components(path)?;
     let metadata = fs::symlink_metadata(path)?;
     ensure!(metadata.is_file(), "demo shard must be a regular file");
-    ensure!(metadata.len() <= crate::format::MIB, "demo shard exceeds its size limit");
+    ensure!(
+        metadata.len() <= crate::format::MIB,
+        "demo shard exceeds its size limit"
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -187,10 +190,14 @@ fn check_shard(path: &Path) -> Result<()> {
 fn replace_shard(path: &Path, bytes: &[u8]) -> Result<()> {
     check_shard(path)?;
     let parent = path.parent().context("demo shard has no parent")?;
-    let mut staged = tempfile::Builder::new().prefix(".demo-shard-").tempfile_in(parent)?;
+    let mut staged = tempfile::Builder::new()
+        .prefix(".demo-shard-")
+        .tempfile_in(parent)?;
     staged.write_all(bytes)?;
     staged.as_file().sync_all()?;
-    staged.persist(path).map_err(|error| error.error)
+    staged
+        .persist(path)
+        .map_err(|error| error.error)
         .with_context(|| format!("replace demo carrier shard {}", path.display()))?;
     crate::fsutil::sync_dir(parent)
 }
@@ -243,9 +250,12 @@ impl DemoSession {
             use std::os::unix::fs::DirBuilderExt;
             builder.mode(0o700);
         }
-        builder
-            .create(&root)
-            .with_context(|| format!("demo root already exists or cannot be created: {}", root.display()))?;
+        builder.create(&root).with_context(|| {
+            format!(
+                "demo root already exists or cannot be created: {}",
+                root.display()
+            )
+        })?;
         let root = fs::canonicalize(&root)
             .with_context(|| format!("cannot canonicalize demo root {}", root.display()))?;
 
@@ -297,8 +307,11 @@ impl DemoSession {
         source_sha256.insert("file_b.bin".to_owned(), file_b_sha256);
 
         // --- 5. Seal the parcel -------------------------------------------
-        let record =
-            alice.seal(&[file_a_path, file_b_path], &bob_card.fingerprint, DEMO_PASSWORD_ALICE)?;
+        let record = alice.seal(
+            &[file_a_path, file_b_path],
+            &bob_card.fingerprint,
+            DEMO_PASSWORD_ALICE,
+        )?;
         let parcel_id = record.parcel_id.clone();
 
         // --- 6. Export to carrier ----------------------------------------
@@ -395,7 +408,9 @@ impl DemoSession {
             DemoPhase::Prepared => self.advance_to_damaged(),
             DemoPhase::Damaged => self.advance_to_received(),
             DemoPhase::Received => self.advance_to_confirmed(),
-            DemoPhase::Confirmed => bail!("demo is already complete; advance cannot be called again"),
+            DemoPhase::Confirmed => {
+                bail!("demo is already complete; advance cannot be called again")
+            }
         }
     }
 
@@ -410,17 +425,13 @@ impl DemoSession {
         if self.snapshot.report_path.is_some() {
             bail!("report already exported to {}", report_path.display());
         }
-        // Set report_path in snapshot before serializing so the JSON includes it.
-        self.snapshot.report_path = Some(report_path.clone());
-        let json = serde_json::to_vec_pretty(&self.snapshot)
+        let mut reported = self.snapshot.clone();
+        reported.report_path = Some(report_path.clone());
+        let json = serde_json::to_vec_pretty(&reported)
             .context("failed to serialize demo snapshot")?;
-        // write_new fails if the file already exists — preserves original on
-        // any concurrent race.
-        if let Err(err) = crate::fsutil::write_new(&report_path, &json) {
-            // Revert the field so the caller can retry with a fresh path if desired.
-            self.snapshot.report_path = None;
-            return Err(err).context("failed to write demo report");
-        }
+        crate::fsutil::write_new(&report_path, &json)?;
+        crate::fsutil::sync_dir(&self.root)?;
+        self.snapshot = reported;
         Ok(report_path)
     }
 
@@ -448,13 +459,11 @@ impl DemoSession {
         //   index >= 20 → path IS a file      (corrupted parity shards)
         for &idx in &[0usize, 1] {
             let carrier = carrier_shard_path(&carrier_parcel_path, 0, idx);
-            delete_shard(&carrier)
-                .with_context(|| format!("delete data shard {idx}"))?;
+            delete_shard(&carrier).with_context(|| format!("delete data shard {idx}"))?;
         }
         for &idx in &[20usize, 21] {
             let carrier = carrier_shard_path(&carrier_parcel_path, 0, idx);
-            xor_shard(&carrier)
-                .with_context(|| format!("corrupt parity shard {idx}"))?;
+            xor_shard(&carrier).with_context(|| format!("corrupt parity shard {idx}"))?;
         }
 
         // -- Inspect: expect 4 erasures, recoverable -----------------------
@@ -499,10 +508,15 @@ impl DemoSession {
         }
 
         // -- Attempt receive with 5 erasures — must fail -------------------
-        let receive_err = match self.bob.receive_parcel(&carrier_parcel_path, DEMO_PASSWORD_BOB) {
+        let receive_err = match self
+            .bob
+            .receive_parcel(&carrier_parcel_path, DEMO_PASSWORD_BOB)
+        {
             Err(e) => e,
             Ok(_) => {
-                bail!("five-erasure receive_parcel unexpectedly succeeded; demo cannot claim refusal");
+                bail!(
+                    "five-erasure receive_parcel unexpectedly succeeded; demo cannot claim refusal"
+                );
             }
         };
         let five_erasure_receive_error = format!("{receive_err:#}");
@@ -541,10 +555,7 @@ impl DemoSession {
         // in Bob's receipts directory, and that export_receipt returns Err
         // (Bob has no committed batch to sign). If export_receipt unexpectedly
         // succeeds, we cannot trust the refusal demonstration.
-        let bob_receipt_path = root
-            .join("bob")
-            .join("receipts")
-            .join(parcel_id.as_str());
+        let bob_receipt_path = root.join("bob").join("receipts").join(parcel_id.as_str());
         if bob_receipt_path.try_exists()? {
             bail!(
                 "Bob receipts directory for parcel exists before restore — state falsely claims Saved: {}",
@@ -623,10 +634,7 @@ impl DemoSession {
             .receive_parcel(&carrier_parcel_path, DEMO_PASSWORD_BOB)?;
 
         if result.repaired_shards != 4 {
-            bail!(
-                "expected 4 repaired shards, got {}",
-                result.repaired_shards
-            );
+            bail!("expected 4 repaired shards, got {}", result.repaired_shards);
         }
 
         // -- Locate received files via record.received_path ----------------
@@ -649,9 +657,7 @@ impl DemoSession {
                 .get(name)
                 .with_context(|| format!("source SHA-256 for {name} missing"))?;
             if &hash != expected {
-                bail!(
-                    "SHA-256 mismatch for {name}: received {hash} != source {expected}"
-                );
+                bail!("SHA-256 mismatch for {name}: received {hash} != source {expected}");
             }
             received_sha256.insert(name.to_owned(), hash);
         }
@@ -689,9 +695,7 @@ impl DemoSession {
         let parcel_id = self.parcel_id.clone();
 
         // -- Bob exports signed receipt to carrier -------------------------
-        let receipt_path = self
-            .bob
-            .export_receipt(&parcel_id, &root.join("carrier"))?;
+        let receipt_path = self.bob.export_receipt(&parcel_id, &root.join("carrier"))?;
 
         // -- Alice imports receipt -----------------------------------------
         let record = self.alice.import_receipt(&receipt_path)?;

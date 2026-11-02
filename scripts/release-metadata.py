@@ -9,7 +9,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -48,13 +48,60 @@ def source_sha():
     ).strip()
     if not re.fullmatch(r"[0-9a-f]{40}", value):
         raise SystemExit("Expected a full Git source commit")
-    expected = os.environ.get("GITHUB_SHA")
+    expected = os.environ.get("RELAYPOST_SOURCE_SHA")
     if expected and expected != value:
-        raise SystemExit("Checkout does not match GITHUB_SHA")
+        raise SystemExit("Checkout does not match RELAYPOST_SOURCE_SHA")
     return value
 
 
-def collect_notices(metadata, roots, destination):
+def load_license_catalog():
+    directory = (ROOT / "third-party").resolve()
+    document = json.loads((directory / "catalog.json").read_text())
+    if document.get("schema_version") != 1:
+        raise SystemExit("Unsupported third-party license catalog schema")
+    with (ROOT / "Cargo.lock").open("rb") as stream:
+        locked = {
+            (package["name"], package["version"]): package.get("checksum")
+            for package in tomllib.load(stream)["package"]
+            if package.get("source", "").startswith("registry+")
+        }
+    packages = {}
+    for entry in document["packages"]:
+        key = (entry["name"], entry["version"])
+        if key in packages or not entry["files"]:
+            raise SystemExit(f"Duplicate or empty license catalog entry: {key}")
+        commit = entry.get("upstream_commit")
+        crate_hash = entry.get("crate_sha256")
+        if commit and not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise SystemExit(f"Invalid license catalog upstream commit: {key}")
+        if crate_hash and crate_hash != locked.get(key):
+            raise SystemExit(f"License catalog crate checksum differs from Cargo.lock: {key}")
+        if not commit and not crate_hash:
+            raise SystemExit(f"License catalog needs a pinned commit or crate checksum: {key}")
+        kinds = {file["kind"] for file in entry["files"]}
+        if not kinds <= {"upstream_license", "upstream_notice", "upstream_declaration", "canonical_license"}:
+            raise SystemExit(f"Unknown license catalog evidence kind: {key}")
+        if not kinds & {"upstream_license", "canonical_license"}:
+            raise SystemExit(f"License catalog contains no license terms: {key}")
+        if "canonical_license" in kinds and (
+            "upstream_declaration" not in kinds or not crate_hash or "authors" not in entry
+        ):
+            raise SystemExit(f"Canonical license needs the pinned upstream declaration and author metadata: {key}")
+        for file in entry["files"]:
+            relative = PurePosixPath(file["path"])
+            if relative.is_absolute() or ".." in relative.parts:
+                raise SystemExit(f"License catalog path must be relative: {file['path']}")
+            path = (directory / file["path"]).resolve()
+            path.relative_to(directory)
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            if digest != file["sha256"] or not file["source_url"].startswith("https://"):
+                raise SystemExit(f"Invalid pinned license source: {file['path']}")
+        packages[key] = entry
+    return packages
+
+
+def collect_notices(metadata, roots, destination, catalog):
     packages = {package["id"]: package for package in metadata["packages"]}
     graph = {node["id"]: node for node in metadata["resolve"]["nodes"]}
     pending = [
@@ -82,9 +129,11 @@ def collect_notices(metadata, roots, destination):
         "and build dependencies reachable from this target's distributed programs;",
         "it excludes development-only dependencies and may include build-time tools.", "",
         "License expressions below are upstream Cargo metadata declarations.",
-        "Supplied license, copyright, and notice files are preserved under licenses/.",
-        "An absent supplied file is explicitly recorded; consult that crate's pinned",
-        "source before redistributing or modifying it. This inventory is not a legal opinion.", "",
+        "Supplied license, copyright, font, and notice files are preserved under licenses/.",
+        "Workspace license texts omitted from published crates are supplemented from",
+        "the checked-in third-party/catalog.json. Their exact upstream source commits,",
+        "URLs and file hashes are retained in DEPENDENCIES.json. This inventory is",
+        "attribution material, not an independent legal audit or proof of static linkage.", "",
         "| Crate | Declared license | Supplied files |", "| --- | --- | --- |",
     ]
     for package in sorted(
@@ -93,8 +142,15 @@ def collect_notices(metadata, roots, destination):
     ):
         package_root = Path(package["manifest_path"]).parent
         supplied = set()
-        for path in package_root.iterdir():
-            if path.is_file() and re.match(r"(?i)^(licen[cs]e|copying|copyright|notice|authors)", path.name):
+        for path in package_root.rglob("*"):
+            if not path.is_file():
+                continue
+            parents = path.relative_to(package_root).parts[:-1]
+            if (
+                re.search(r"(?i)(^|[-_.])(licen[cs]e|copying|copyright|notice|authors)", path.name)
+                or any(part.casefold() in ("license", "licenses") for part in parents)
+                or ("fonts" in parents and path.suffix.casefold() == ".txt")
+            ):
                 supplied.add(path)
         license_file = package.get("license_file")
         if license_file:
@@ -102,10 +158,14 @@ def collect_notices(metadata, roots, destination):
             if not path.is_file():
                 raise SystemExit(f"Declared license file is missing: {package['name']}")
             supplied.add(path)
-        for dirname in ("license", "licenses", "LICENSES"):
-            path = package_root / dirname
-            if path.is_dir():
-                supplied.update(item for item in path.rglob("*") if item.is_file())
+        if package["name"] == "epaint_default_fonts":
+            required = {
+                "fonts/Hack-Regular.txt", "fonts/OFL.txt", "fonts/UFL.txt",
+                "fonts/emoji-icon-font-mit-license.txt",
+            }
+            found = {path.relative_to(package_root).as_posix() for path in supplied}
+            if not required <= found:
+                raise SystemExit("Bundled fonts are missing their required upstream notices")
         slug = f"{package['name']}-{package['version']}"
         copied = []
         for path in sorted(supplied):
@@ -114,15 +174,28 @@ def collect_notices(metadata, roots, destination):
             output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, output)
             copied.append(output.relative_to(destination).as_posix())
+        pinned = catalog.get((package["name"], package["version"]))
+        provenance = None
+        if pinned:
+            records = []
+            for file in pinned["files"]:
+                output = destination / "licenses" / slug / "upstream" / file["path"]
+                output.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / "third-party" / file["path"], output)
+                relative = output.relative_to(destination).as_posix()
+                copied.append(relative)
+                records.append({**file, "catalog_path": file["path"], "path": relative})
+            provenance = {**pinned, "files": records}
+        if not copied:
+            raise SystemExit(f"No provided or catalogued license notices: {slug}")
         license_expression = package.get("license") or "See supplied license file"
         inventory.append({
             "name": package["name"], "version": package["version"],
             "license": package.get("license"), "source": package["source"],
             "repository": package.get("repository"), "supplied_files": copied,
+            "upstream_catalog": provenance,
         })
         paths = ", ".join(f"[{Path(path).name}]({path})" for path in copied)
-        if not paths:
-            paths = f"[Upstream source](https://crates.io/crates/{package['name']}/{package['version']}) (no license file supplied)"
         lines.append(f"| {slug} | {license_expression.replace('|', '/')} | {paths} |")
     (destination / "THIRD_PARTY_NOTICES.md").write_text("\n".join(lines) + "\n")
     (destination / "DEPENDENCIES.json").write_text(json.dumps(inventory, indent=2) + "\n")
@@ -174,7 +247,7 @@ def prepare(args):
             (destination / name).write_text(text)
         else:
             shutil.copyfile(source_path, destination / name)
-    collect_notices(metadata, target["packages"], destination)
+    collect_notices(metadata, target["packages"], destination, load_license_catalog())
     toolchain_licenses = Path(os.environ["RUST_LICENSE_DIR"])
     for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
         source = toolchain_licenses / name

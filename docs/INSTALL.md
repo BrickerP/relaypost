@@ -39,7 +39,7 @@ Intel Macs, Linux ARM, Linux desktop UI and Windows packages are not available.
    package cannot bypass Gatekeeper; managed Macs may disallow approval. Do not
    disable Gatekeeper or remove quarantine attributes.
 
-3. Choose **Try Demo** for a disposable synthetic exchange in a new directory.
+3. Choose **Try guided demo** for a disposable synthetic exchange in a new directory.
    This walks through sealing, damaged-carrier inspection, repair, receipt and
    confirmation without using your normal identity. To exchange your own files,
    create an identity in **Identity & Contacts**, exchange public cards with the
@@ -94,7 +94,12 @@ machine-readable `DEPENDENCIES.json`, and the dependencies' supplied license and
 notice files under `licenses/`. The macOS app also keeps these in
 `Contents/Resources`, so moving the app preserves its notices. Dependencies have
 their own license terms; consult the pinned upstream source for inventory entries
-where no license file was supplied before redistributing or modifying them.
+when redistributing or modifying them. Workspace license texts omitted from
+published crates are included from the checked-in source catalog. Original
+copyright notices, source commits or crate checksums, URLs and text hashes are
+retained in the inventory. Entries using a primary canonical license text retain
+the exact upstream declaration and real author metadata; they do not invent a
+copyright holder or year.
 
 To remove the app, delete `RelayPost.app` (or the extracted Linux directory).
 Profile data and demo output are separate: uninstalling does not remove your
