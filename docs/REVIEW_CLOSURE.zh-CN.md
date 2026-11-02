@@ -20,4 +20,4 @@ History 的恢复区域提供 **Verify & recover local records** 与 **Discard i
 
 Rust 编译、格式检查、Clippy、单元与集成回归，以及真实 CLI 演示均由 [GitHub Actions](https://github.com/BrickerP/relaypost/actions/workflows/ci.yml) 执行，当前提交的通过状态见 [CR #1](https://github.com/BrickerP/relaypost/pull/1/checks)。本轮未本地编译或运行 Rust 测试。
 
-回归通过构造合成身份和持久目录状态覆盖中断窗口。真实双机、物理 USB、断电行为、独立安全审计、Apple 公证，以及 Kiro 的真实开发记录仍需各自完成；现有记录不代替这些验证。
+回归通过构造合成身份和持久目录状态覆盖中断窗口。真实双机、物理 USB、断电行为、独立安全审计和 Apple 公证仍需各自完成。Kiro 的实际开发贡献、作者分工与验证状态记录在 [Kiro development evidence](KIRO_USAGE.md)；代码回归不代替物理环境验证。

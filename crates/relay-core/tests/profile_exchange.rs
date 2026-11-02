@@ -1351,3 +1351,46 @@ fn exports_cannot_write_into_any_managed_profile_tree() {
         DeliveryState::Confirmed
     );
 }
+
+#[test]
+fn recovery_refuses_to_resurrect_an_indexed_but_externally_deleted_final_batch_from_valid_stage() {
+    let pair = Pair::new(true);
+    let outgoing = pair.seal(b"SYNTHETIC indexed destination deletion");
+    let parcel = pair.export(&outgoing, "indexed-deleted-carrier");
+    let received = pair.bob.receive_parcel(&parcel, PASSWORD).unwrap().record;
+    assert!(pair.bob.deliveries().unwrap().iter().any(|row| {
+        row.parcel_id == outgoing.parcel_id
+            && row.direction == Direction::Incoming
+            && row.state == DeliveryState::SavedReceiptReady
+    }));
+    let published_batch_dir = received
+        .received_path
+        .as_ref()
+        .unwrap()
+        .parent()
+        .expect("received files live inside their authenticated batch")
+        .to_path_buf();
+    let stage = stage_received_batch(&pair, &received, true);
+    let stage_digest_before = tree_digest(&stage);
+    assert!(stage.join("batch/.relaypost/prepared.json").exists());
+
+    // Keep the incoming row: this is external deletion, not an unindexed crash.
+    fs::remove_dir_all(&published_batch_dir).unwrap();
+    for _ in 0..2 {
+        let summary = pair.bob.recover(PASSWORD).unwrap();
+        assert_eq!(summary.recovered, 0);
+        assert_eq!(summary.pending, 1);
+        assert!(!summary.conflicts.is_empty());
+        assert!(!published_batch_dir.exists());
+        assert_eq!(tree_digest(&stage), stage_digest_before);
+        assert_not_committed(
+            &pair.bob,
+            &outgoing.parcel_id,
+            &pair.root.join("indexed-deleted-return"),
+        );
+
+        assert!(pair.bob.receive_parcel(&parcel, PASSWORD).is_err());
+        assert!(!published_batch_dir.exists());
+        assert_eq!(tree_digest(&stage), stage_digest_before);
+    }
+}

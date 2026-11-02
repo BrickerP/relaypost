@@ -1,20 +1,22 @@
 # Kiro development evidence
 
-On 2026-10-31, the official Kiro CLI installer installed `kiro-cli 2.37.0`.
-Authentication and the first development session are pending: `kiro-cli whoami`
-reported `Not logged in`. The official browser login page requires the account
-holder to accept its service agreements. No Kiro-generated implementation or
-completed Kiro review is claimed.
+The initial RelayPost implementation was developed with Codex. On 2026-11-02,
+a real Kiro CLI v2 session reviewed receive recovery and generated a regression
+candidate. Codex applied and simplified that candidate during review.
 
-The initial implementation was developed with Codex. A real Kiro development
-session and its evidence are still required before presenting this repository as
-a completed Kiro-based hackathon submission. Creating a `.kiro` folder alone
-does not satisfy that requirement.
+| Evidence | Record |
+| --- | --- |
+| Actual session | `10ae599a-fca2-4185-b27c-ce5a7663be5e` |
+| Task | Refuse recovery/re-import of an externally deleted, still-indexed inbox batch while retaining its valid staged copy. |
+| Contribution | One integration regression in `crates/relay-core/tests/profile_exchange.rs`. |
+| Authorship | Kiro generated the complete candidate; Codex applied and simplified it. |
+| Delivery and validation | [PR #1](https://github.com/BrickerP/relaypost/pull/1) and its [remote checks](https://github.com/BrickerP/relaypost/pull/1/checks). |
 
-After the account holder finishes login, use Kiro on a concrete remaining task
-such as adversarial protocol review or a validated regression fix. Keep local
-compilation disabled; use the repository's GitHub Actions workflow for Rust
-checks.
+[The factual session record](../.kiro/evidence/indexed-deletion-regression.md)
+contains the prompt summary, tool-approval outcome, observed CLI versions,
+and review adjustments. Original candidate/logs remain in ignored local
+`artifacts/kiro-2026-11-02/`; credentials and private configuration are not tracked.
 
-Record only actual sessions, their task, changed files, relevant observations, and corresponding commits/CI checks. Never commit credentials, session tokens, or fabricated transcripts.
-
+All Rust compilation, formatting and tests run in GitHub Actions. This contribution
+records actual Kiro use; it does not claim Kiro authored the initial product or
+guarantee hackathon eligibility.
