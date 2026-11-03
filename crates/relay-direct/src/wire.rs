@@ -6,7 +6,7 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream};
 use std::time::{Duration, Instant};
 
 pub(crate) const MAX_JSON: u64 = 140 * 1024;
-pub(crate) const MAX_BUNDLE: u64 = 100 * 1024 * 1024;
+pub(crate) const MAX_BUNDLE: u64 = relay_core::MAX_DIRECT_BUNDLE;
 pub(crate) const IDLE: Duration = Duration::from_secs(30);
 pub(crate) const DEADLINE: Duration = Duration::from_secs(600);
 const MAGIC: &[u8; 8] = b"RLYPST1\n";

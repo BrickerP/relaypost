@@ -35,11 +35,13 @@ struct State {
     pairs: HashMap<String, PairEntry>,
     offers: HashMap<String, OfferEntry>,
     jobs: HashSet<String>,
+    staged: HashSet<String>,
 }
 struct Shared {
     profile: Profile,
     state: Mutex<State>,
     stopped: AtomicBool,
+    finished: AtomicBool,
     active: Mutex<HashMap<u64, TcpStream>>,
     connections: AtomicUsize,
     bundles: AtomicUsize,
@@ -133,14 +135,14 @@ impl DirectHandle {
             peers: Vec::new(), incoming_pairings: Vec::new(), pairing_attempts: Vec::new(),
             incoming: Vec::new(), outgoing: Vec::new() };
         let shared = Arc::new(Shared { profile,
-            state: Mutex::new(State { snapshot, peers: HashMap::new(), pairs: HashMap::new(), offers: HashMap::new(), jobs: HashSet::new() }),
-            stopped: AtomicBool::new(false), active: Mutex::new(HashMap::new()),
+            state: Mutex::new(State { snapshot, peers: HashMap::new(), pairs: HashMap::new(), offers: HashMap::new(), jobs: HashSet::new(), staged: HashSet::new() }),
+            stopped: AtomicBool::new(false), finished: AtomicBool::new(false), active: Mutex::new(HashMap::new()),
             connections: AtomicUsize::new(0), bundles: AtomicUsize::new(0), jobs: AtomicUsize::new(0),
             next_socket: AtomicU64::new(1), address: Mutex::new(None), on_change });
         let (commands, receiver) = mpsc::sync_channel(32);
         let (done_tx, done) = mpsc::sync_channel(1);
         let worker = shared.clone();
-        thread::spawn(move || { run(worker, receiver, config); let _ = done_tx.send(()); });
+        thread::spawn(move || { run(worker.clone(), receiver, config); worker.finished.store(true, Ordering::Release); let _ = done_tx.send(()); });
         Self { shared, commands, done: Mutex::new(done) }
     }
     pub fn snapshot(&self) -> DirectSnapshot { lock(&self.shared.state).snapshot.clone() }
@@ -152,9 +154,9 @@ impl DirectHandle {
         })
     }
     pub fn shutdown(&self) -> std::result::Result<(), DirectCommandError> {
-        let already = self.shared.stopped.swap(true, Ordering::AcqRel);
+        self.shared.stopped.store(true, Ordering::Release);
         self.shared.close_sockets();
-        if already { return Ok(()); }
+        if self.shared.finished.load(Ordering::Acquire) { return Ok(()); }
         lock(&self.done).recv_timeout(Duration::from_secs(2)).map_err(|_| DirectCommandError::ShutdownTimeout)
     }
 }
@@ -266,7 +268,13 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
             shared.edit(|s| {
                 s.peers.retain(|_, peer| peer.seen.elapsed() < Duration::from_secs(35));
                 s.pairs.retain(|_, pair| pair.created.elapsed() < Duration::from_secs(600));
-                s.offers.retain(|_, offer| offer.receiving || offer.decision == Decision::Stored || offer.created.elapsed() < Duration::from_secs(600));
+                let expired: HashSet<_> = s.offers.iter().filter(|(_, offer)| !offer.receiving && offer.decision != Decision::Stored && offer.created.elapsed() >= Duration::from_secs(600)).map(|(id, _)| id.clone()).collect();
+                s.offers.retain(|id, _| !expired.contains(id));
+                for incoming in &mut s.snapshot.incoming {
+                    if expired.contains(&incoming.parcel_id) {
+                        incoming.state = IncomingOfferState::Failed { message: "This request expired. Ask the sender to try again.".to_owned(), retryable: true };
+                    }
+                }
             });
         }
         if last_receipts.elapsed() >= Duration::from_secs(2) {
@@ -304,6 +312,7 @@ fn restore_profile(shared: &Arc<Shared>) {
     }
     let staged = shared.profile.direct_offers().unwrap_or_default();
     shared.edit(|state| {
+        state.staged = staged.iter().map(|p| p.inspection.parcel_id.clone()).collect();
         for peer in state.peers.values_mut() {
             peer.verified = contacts.iter().any(|c| c.verified && c.card == peer.card);
         }
@@ -446,7 +455,8 @@ fn handle_request(shared: &Arc<Shared>, stream: &mut wire::Stream) -> Result<Rep
                     if existing.decision != Decision::Declined { result = Some(existing.decision); return; }
                 }
                 state.offers.retain(|_, value| value.decision != Decision::Declined);
-                if state.offers.len() >= MAX_OFFERS { return; }
+                let pending: HashSet<_> = state.offers.keys().chain(state.staged.iter()).collect();
+                if pending.len() >= MAX_OFFERS { return; }
                 state.offers.insert(inspected.parcel_id.clone(), OfferEntry { artifact,
                     decision: Decision::Waiting, receiving: false, created: Instant::now() });
                 let row = IncomingOffer { parcel_id: inspected.parcel_id.clone(), sender_name,
@@ -505,7 +515,10 @@ fn receive_bundle(shared: &Arc<Shared>, stream: &mut wire::Stream, length: u64) 
         temporary.as_file().sync_all()?;
         let staged = shared.profile.stage_direct_bundle(&artifact, temporary.path())?;
         shared.incoming(&id, IncomingOfferState::ReadyToSave { parcel_path: staged.parcel_path, inspection: staged.inspection });
-        shared.revision();
+        shared.edit(|state| {
+            state.staged.insert(id.clone());
+            state.snapshot.profile_revision = state.snapshot.profile_revision.wrapping_add(1);
+        });
         Ok(Reply::Stored { parcel_id: id.clone() })
     })();
     shared.edit(|state| { if let Some(offer) = state.offers.get_mut(&id) {
@@ -737,10 +750,12 @@ mod tests {
         assert!(bob.receipt_artifact(&parcel.parcel_id).is_err());
         // A client attempting to bypass Accept cannot upload any large body.
         let prepared = alice.prepare_direct_handoff(&parcel.parcel_id).unwrap();
-        let mut premature = wire::connect(address(&b)).unwrap();
-        wire::write_header(&mut premature, Kind::Bundle, prepared.bundle_len() + 64).unwrap();
-        premature.write_all(parcel.parcel_id.as_bytes()).unwrap();
-        assert!(wire::read_reply(&mut premature).is_err());
+        for _ in 0..3 {
+            let mut premature = wire::connect(address(&b)).unwrap();
+            wire::write_header(&mut premature, Kind::Bundle, prepared.bundle_len() + 64).unwrap();
+            premature.write_all(parcel.parcel_id.as_bytes()).unwrap();
+            assert!(wire::read_reply(&mut premature).is_err());
+        }
         assert!(bob.direct_offers().unwrap().is_empty());
         b.command(DirectCommand::AcceptOffer { parcel_id: parcel.parcel_id.clone() }).unwrap();
         wait_until(|| b.snapshot().incoming.iter().any(|p| p.parcel_id == parcel.parcel_id && matches!(p.state, IncomingOfferState::ReadyToSave {..})));
@@ -778,4 +793,61 @@ mod tests {
         assert_eq!(alice.deliveries().unwrap()[0].state, DeliveryState::Ready);
         a.shutdown().unwrap(); b.shutdown().unwrap();
     }
+
+    #[test]
+    fn restart_recovers_exact_stage_and_polls_saved_receipt() {
+        let root = tempfile::tempdir().unwrap();
+        let alice = Profile::open(root.path().join("alice")).unwrap();
+        let bob = Profile::open(root.path().join("bob")).unwrap();
+        let ac = alice.initialize("Synthetic restart sender", PASSWORD).unwrap();
+        let bc = bob.initialize("Synthetic restart receiver", PASSWORD).unwrap();
+        alice.import_contact_card(&bc).unwrap(); alice.trust_contact(&bc.fingerprint).unwrap();
+        bob.import_contact_card(&ac).unwrap(); bob.trust_contact(&ac.fingerprint).unwrap();
+        let source = root.path().join("restart.txt"); fs::write(&source, b"survives application restart").unwrap();
+        let record = alice.seal(&[source.clone()], &bc.fingerprint, PASSWORD).unwrap();
+        let prepared = alice.prepare_direct_handoff(&record.parcel_id).unwrap();
+        let encrypted = root.path().join("encrypted.bundle");
+        let mut file = fs::File::create(&encrypted).unwrap();
+        std::io::copy(&mut prepared.open_bundle().unwrap(), &mut file).unwrap();
+        file.sync_all().unwrap();
+        // This is the managed on-disk state after an earlier accepted network
+        // transfer. Newly created nodes must restore it without a second save.
+        bob.stage_direct_bundle(&prepared.offer, &encrypted).unwrap();
+        alice.record_direct_handoff(&record.parcel_id).unwrap();
+        let b = node(&bob);
+        let a = node(&alice);
+        discover(&a, &b, &bc.fingerprint);
+        wait_until(|| b.snapshot().incoming.iter().any(|row| row.parcel_id == record.parcel_id && matches!(row.state, IncomingOfferState::ReadyToSave {..})));
+        let reply = a.shared.rpc(address(&b), Kind::Offer, &prepared.offer).unwrap();
+        assert!(matches!(reply, Reply::Offer { decision: Decision::Stored, .. }));
+        assert_eq!(alice.deliveries().unwrap()[0].state, DeliveryState::WaitingReceipt);
+        a.shutdown().unwrap();
+        let staged = bob.direct_offers().unwrap().pop().unwrap();
+        let received = bob.receive_parcel(&staged.parcel_path, PASSWORD).unwrap();
+        b.command(DirectCommand::ReloadProfile).unwrap();
+        let restarted = node(&Profile::open(root.path().join("alice")).unwrap());
+        discover(&restarted, &b, &bc.fingerprint);
+        wait_until(|| alice.deliveries().unwrap()[0].state == DeliveryState::Confirmed);
+        assert_eq!(fs::read(source).unwrap(), fs::read(received.record.received_path.unwrap().join("restart.txt")).unwrap());
+        assert_eq!(bob.deliveries().unwrap().len(), 1);
+        restarted.shutdown().unwrap(); b.shutdown().unwrap();
+    }
+
+    #[test]
+    fn shutdown_interrupts_an_incomplete_network_header() {
+        let root = tempfile::tempdir().unwrap();
+        let profile = Profile::open(root.path().join("receiver")).unwrap();
+        profile.initialize("Synthetic shutdown receiver", PASSWORD).unwrap();
+        let receiver = node(&profile);
+        let mut blocked = wire::connect(address(&receiver)).unwrap();
+        blocked.write_all(b"RLY").unwrap();
+        wait_until(|| receiver.shared.connections.load(Ordering::Acquire) > 0);
+        let start = Instant::now();
+        receiver.shutdown().unwrap();
+        assert!(start.elapsed() < Duration::from_secs(2));
+        receiver.shutdown().unwrap();
+        let mut byte = [0];
+        assert_eq!(blocked.read(&mut byte).unwrap_or(0), 0);
+    }
+
 }
