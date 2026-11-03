@@ -136,6 +136,14 @@ fn direct_handoff_preserves_authorities_and_survives_restart() -> Result<()> {
     let restarted_bob = Profile::open(pair.root.join("bob"))?;
     let offers = restarted_bob.direct_offers()?;
     assert_eq!(offers.len(), 1);
+    assert_eq!(offers[0].offer.files, 1);
+    assert_eq!(
+        offers[0].offer.total_bytes,
+        b"Synthetic direct transfer content\n".len() as u64
+    );
+    assert_eq!(offers[0].offer.sender, pair.alice_card.fingerprint);
+    assert_eq!(offers[0].offer.recipient, pair.bob_card.fingerprint);
+    assert_eq!(offers[0].offer.bundle_bytes, offer.bundle_bytes);
     let saved = restarted_bob.receive_parcel(&offers[0].parcel_path, PASSWORD)?;
     assert_eq!(saved.repaired_shards, 1);
     assert_eq!(saved.record.state, DeliveryState::SavedReceiptReady);

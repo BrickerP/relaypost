@@ -53,6 +53,8 @@ impl PreparedDirectHandoff {
 pub struct StagedDirectParcel {
     pub parcel_path: PathBuf,
     pub inspection: Inspection,
+    /// Metadata from the authenticated envelope, also available after restart.
+    pub offer: DirectOffer,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -216,6 +218,7 @@ impl Profile {
         Ok(Some(StagedDirectParcel {
             parcel_path: destination,
             inspection,
+            offer: offer_details(&existing, bundle_length(&bundle_entries(&existing))?),
         }))
     }
 
@@ -264,6 +267,7 @@ impl Profile {
         Ok(StagedDirectParcel {
             parcel_path: destination,
             inspection,
+            offer: offer_details(&authenticated, artifact.bundle_bytes),
         })
     }
 
@@ -300,6 +304,7 @@ impl Profile {
             offers.push(StagedDirectParcel {
                 parcel_path: entry.path(),
                 inspection,
+                offer: offer_details(&authenticated, bundle_length(&bundle_entries(&authenticated))?),
             });
         }
         offers.sort_by(|a, b| a.inspection.parcel_id.cmp(&b.inspection.parcel_id));
