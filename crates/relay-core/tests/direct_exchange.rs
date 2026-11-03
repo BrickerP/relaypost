@@ -77,7 +77,9 @@ impl Pair {
 
 fn shard_offset(bytes: &[u8]) -> usize {
     bytes
-        .chunks_exact(512)
+        .as_chunks::<512>()
+        .0
+        .iter()
         .position(|block| block.starts_with(b"groups/g000/s000.bin\0"))
         .expect("canonical shard header")
         * 512
