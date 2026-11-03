@@ -55,16 +55,16 @@ impl Action {
             Self::Refresh => "Checking this computer…",
             Self::Measure(_) => "Checking selected files…",
             Self::Initialize(..) => "Setting up this computer…",
-            Self::ExportCard(_) => "Saving your connection card…",
-            Self::ImportContact(_) => "Checking the connection card…",
-            Self::Trust(_) => "Saving the checked connection…",
+            Self::ExportCard(_) => "Saving your identity card…",
+            Self::ImportContact(_) => "Checking the identity card…",
+            Self::Trust(_) => "Saving the local safety-code check…",
             Self::Seal(..) => "Protecting your files…",
-            Self::ExportParcel(..) => "Copying the transfer to your drive…",
+            Self::ExportParcel(..) => "Saving the transfer to the chosen folder…",
             Self::FindTransfers(_) => "Looking for transfer folders…",
             Self::FindReceipts(_) => "Looking for confirmation folders…",
             Self::Inspect(_) => "Checking this transfer…",
             Self::Receive(..) => "Restoring and saving your files…",
-            Self::ExportReceipt(..) => "Copying the confirmation to your drive…",
+            Self::ExportReceipt(..) => "Saving the confirmation to the chosen folder…",
             Self::ImportReceipt(_) => "Verifying the delivery confirmation…",
             Self::OpenFolder(_) => "Opening your saved files…",
             Self::Recover(_) => "Checking saved files and records…",
@@ -80,9 +80,13 @@ impl Action {
 pub enum Payload {
     None,
     Initialized,
+    CardExported,
     ContactImported(Box<Contact>),
-    Trusted,
-    ParcelExported,
+    Trusted(String),
+    ParcelExported {
+        id: String,
+        path: PathBuf,
+    },
     ReceiptExported(String),
     ReceiptImported(Box<ParcelRecord>),
     /// Name-only candidates. These have not been authenticated by discovery.
@@ -151,16 +155,16 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::ExportCard(output) => {
             profile.export_card(&output)?;
             (
-                "Connection card saved. Give it to the other person to add this computer."
+                "Identity card saved. Share it with the other person so they can add this computer."
                     .to_owned(),
-                Payload::None,
+                Payload::CardExported,
             )
         }
         Action::ImportContact(input) => {
             let contact = profile.import_contact(&input)?;
             (
                 format!(
-                    "Connection card added for {}. Compare the safety code before exchanging files.",
+                    "Identity card added for {}. Compare every group of the safety code before exchanging files.",
                     contact.card.name
                 ),
                 Payload::ContactImported(Box::new(contact)),
@@ -169,9 +173,9 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::Trust(fingerprint) => {
             profile.trust_contact(&fingerprint)?;
             (
-                "Connection checked. The other computer must also check your connection card."
+                "The other computer's safety code was checked here. The other person still needs to check this computer's code."
                     .to_owned(),
-                Payload::Trusted,
+                Payload::Trusted(fingerprint),
             )
         }
         Action::Seal(inputs, recipient, password) => {
@@ -192,11 +196,11 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             )
         }
         Action::ExportParcel(id, carrier) => {
-            profile.export_parcel(&id, &carrier)?;
+            let path = profile.export_parcel(&id, &carrier)?;
             (
-                "Transfer copied. Take the drive to the other computer; delivery is not confirmed yet."
+                "Encrypted package saved. Give the package to the other person; delivery is not confirmed yet."
                     .to_owned(),
-                Payload::ParcelExported,
+                Payload::ParcelExported { id, path },
             )
         }
         Action::FindTransfers(root) => {
@@ -230,14 +234,14 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let notice = if result.duplicate {
                 "These files were already saved. RelayPost checked them again."
             } else {
-                "Files saved and checked. Put the confirmation on the drive to send back."
+                "Files saved and checked. Send the confirmation back to the sender."
             };
             (notice.to_owned(), Payload::Received(Box::new(result)))
         }
         Action::ExportReceipt(id, carrier) => {
             profile.export_receipt(&id, &carrier)?;
             (
-                "Confirmation copied to the drive. Take it back to the sender.".to_owned(),
+                "Confirmation saved. Send it back to the sender.".to_owned(),
                 Payload::ReceiptExported(id),
             )
         }
@@ -266,7 +270,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::Cancel(id) => {
             profile.cancel(&id)?;
             (
-                "Future copies are stopped. Copies already on a drive still work.".to_owned(),
+                "Future copies are stopped. Copies already shared still work.".to_owned(),
                 Payload::None,
             )
         }
@@ -303,7 +307,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let snapshot = session.snapshot();
             let notice = match snapshot.phase {
                 relay_core::DemoPhase::Damaged => {
-                    "The example drive copy is damaged. The app also checked that excessive damage is refused."
+                    "The example package copy is damaged. The app also checked that excessive damage is refused."
                         .to_owned()
                 }
                 relay_core::DemoPhase::Received => {
@@ -388,7 +392,7 @@ fn discover_folders(root: &Path, extension: &str) -> Result<Vec<PathBuf>> {
         .enumerate()
     {
         if index >= MAX_ENTRIES {
-            bail!("This drive has too many items to check at once. Choose the folder containing the RelayPost transfer or confirmation.");
+            bail!("This folder has too many items to check at once. Choose the folder containing the RelayPost transfer or confirmation.");
         }
         let entry = entry.context("Cannot read an item in the selected folder")?;
         let file_type = entry

@@ -16,8 +16,14 @@ enum Screen {
     Send,
     Receive,
     Activity,
-    People,
+    Recipients,
     Demo,
+}
+
+#[derive(Clone, Copy)]
+enum CardStep {
+    ShareCard,
+    OpenCard,
 }
 
 #[derive(Clone)]
@@ -63,7 +69,11 @@ pub struct RelayApp {
     cancel_id: Option<String>,
     discard_incomplete: bool,
     unlock: Option<Unlock>,
-    after_pairing: Option<Screen>,
+    recipient_return: Option<Screen>,
+    card_step: Option<CardStep>,
+    computer_open: bool,
+    recipient_details: Option<Contact>,
+    last_export: Option<(String, PathBuf)>,
     transfer_candidates: Vec<PathBuf>,
     receipt_candidates: Vec<PathBuf>,
     receipt_exported: std::collections::HashSet<String>,
@@ -107,7 +117,11 @@ impl RelayApp {
             cancel_id: None,
             discard_incomplete: false,
             unlock: None,
-            after_pairing: None,
+            recipient_return: None,
+            card_step: None,
+            computer_open: false,
+            recipient_details: None,
+            last_export: None,
             transfer_candidates: Vec::new(),
             receipt_candidates: Vec::new(),
             receipt_exported: std::collections::HashSet::new(),
@@ -123,7 +137,9 @@ impl RelayApp {
     }
 
     fn modal_open(&self) -> bool {
-        self.unlock.is_some()
+        self.computer_open
+            || self.recipient_details.is_some()
+            || self.unlock.is_some()
             || self.trust_contact.is_some()
             || self.cancel_id.is_some()
             || self.discard_incomplete
@@ -198,19 +214,27 @@ impl RelayApp {
                 }
                 match completed.payload {
                     Payload::None => {}
-                    Payload::Initialized => self.screen = Screen::Send,
+                    Payload::Initialized => {
+                        self.computer_open = false;
+                        self.screen = Screen::Send;
+                    }
+                    Payload::CardExported => {
+                        if matches!(self.card_step, Some(CardStep::ShareCard)) {
+                            self.card_step = Some(CardStep::OpenCard);
+                        }
+                    }
                     Payload::ContactImported(contact) => {
                         if contact.verified {
-                            self.screen = self.after_pairing.take().unwrap_or(Screen::Send);
+                            self.finish_adding_recipient(contact.card.fingerprint.clone());
                         } else {
                             self.trust_contact = Some(*contact);
                             self.trust_fingerprint.clear();
                         }
                     }
-                    Payload::Trusted => {
-                        self.screen = self.after_pairing.take().unwrap_or(Screen::Send);
+                    Payload::Trusted(fingerprint) => self.finish_adding_recipient(fingerprint),
+                    Payload::ParcelExported { id, path } => {
+                        self.last_export = Some((id, path));
                     }
-                    Payload::ParcelExported => {}
                     Payload::ReceiptExported(id) => {
                         self.receipt_exported.insert(id);
                     }
@@ -306,7 +330,7 @@ impl RelayApp {
                     (Screen::Send, "Send files"),
                     (Screen::Receive, "Receive files"),
                     (Screen::Activity, "Transfers"),
-                    (Screen::People, "People"),
+                    (Screen::Recipients, "Recipients"),
                 ] {
                     let selected = self.screen == screen;
                     let button =
@@ -328,21 +352,21 @@ impl RelayApp {
                     ui.add_space(5.0);
                 }
                 ui.add_space((ui.available_height() - 158.0).max(24.0));
-                ui.label(
-                    RichText::new("THIS COMPUTER")
-                        .size(11.0)
-                        .color(Color32::from_rgb(136, 171, 164)),
-                );
-                ui.label(
-                    RichText::new(
-                        self.identity
-                            .as_ref()
-                            .map(|c| c.name.as_str())
-                            .unwrap_or("Not set up yet"),
+                let computer_name = self.identity.as_ref().map(|card| card.name.as_str()).unwrap_or("Set up this computer");
+                if ui.add_enabled(
+                    !self.busy() && !self.modal_open(),
+                    egui::Button::new(
+                        RichText::new(format!("This computer\n{computer_name}"))
+                            .font(display_font(14.0))
+                            .color(Color32::WHITE),
                     )
-                    .font(display_font(14.0))
-                    .color(Color32::WHITE),
-                );
+                    .fill(Color32::TRANSPARENT)
+                    .frame(false)
+                    .wrap()
+                    .min_size(egui::vec2(ui.available_width(), 52.0)),
+                ).clicked() {
+                    self.computer_open = true;
+                }
                 ui.add_space(16.0);
                 if ui
                     .add_enabled(
@@ -384,15 +408,40 @@ impl RelayApp {
         })
     }
 
-    fn connect_for(&mut self, destination: Screen) {
-        self.after_pairing = Some(destination);
-        self.switch_screen(Screen::People);
+    fn add_recipient_for(&mut self, destination: Screen) {
+        if self.identity.is_none() {
+            self.computer_open = true;
+            return;
+        }
+        self.recipient_return = Some(destination);
+        self.card_step = Some(CardStep::ShareCard);
+        self.switch_screen(Screen::Recipients);
+    }
+
+    fn finish_adding_recipient(&mut self, fingerprint: String) {
+        self.recipient = fingerprint;
+        self.invalidate_sealed();
+        self.card_step = None;
+        self.screen = self.recipient_return.take().unwrap_or(Screen::Recipients);
+        self.notice = format!("{} is selected. Their safety code was checked here. They must also check this computer's complete code.", self.contact_name(&self.recipient));
+    }
+
+    fn export_my_card(&mut self, context: &egui::Context) {
+        let Some(card) = &self.identity else { return };
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title("Save this computer's public identity card")
+            .set_file_name(connection_card_filename(&card.name, &card.fingerprint))
+            .add_filter("Identity card", &["json"])
+            .save_file()
+        {
+            self.start(context, Action::ExportCard(path));
+        }
     }
 
     fn import_card(&mut self, context: &egui::Context) {
         if let Some(path) = rfd::FileDialog::new()
-            .set_title("Open their RelayPost connection card")
-            .add_filter("Connection card", &["json"])
+            .set_title("Open the recipient computer's identity card")
+            .add_filter("Identity card", &["json"])
             .pick_file()
         {
             self.start(context, Action::ImportContact(path));
@@ -483,7 +532,7 @@ impl RelayApp {
                 ui.label("Give this computer a name and a password. No online account is needed.");
                 ui.add_space(16.0);
                 if primary(ui, "Set up this computer", true).clicked() {
-                    self.connect_for(Screen::Send);
+                    self.computer_open = true;
                 }
             });
             return;
@@ -502,11 +551,11 @@ impl RelayApp {
             .collect();
         if trusted.is_empty() {
             surface(ui, |ui| {
-                ui.label(RichText::new("Connect the other computer").font(display_font(22.0)));
-                ui.label("Exchange connection cards once, then check the complete safety codes together. This keeps your files going to the right person.");
+                ui.label(RichText::new("Who should be able to open the files?").font(display_font(22.0)));
+                ui.label("Add the recipient's computer using its public identity card, then check its complete safety code. Adding a recipient does not send files or create a live connection.");
                 ui.add_space(16.0);
-                if primary(ui, "Connect another computer", true).clicked() {
-                    self.connect_for(Screen::Send);
+                if primary(ui, "Add recipient", true).clicked() {
+                    self.add_recipient_for(Screen::Send);
                 }
             });
             return;
@@ -524,10 +573,10 @@ impl RelayApp {
             let name = self.other_name(&record);
             surface(ui, |ui| {
                 let heading = match record.state {
-                    DeliveryState::Ready => "Transfer ready",
+                    DeliveryState::Ready => "Encrypted package prepared",
                     DeliveryState::Confirmed => "Delivery confirmed",
                     DeliveryState::Cancelled => "Transfer stopped",
-                    _ => "Ready to carry",
+                    _ => "Package saved for delivery",
                 };
                 ui.label(RichText::new(heading).font(display_font(25.0)));
                 ui.label(format!(
@@ -548,17 +597,17 @@ impl RelayApp {
                 ui.add_space(16.0);
                 match record.state {
                     DeliveryState::Ready => {
-                        ui.label("Choose a USB drive or folder. RelayPost will copy the protected transfer there.");
-                        if primary(ui, "Choose drive or folder…", true).clicked() {
+                        ui.label("Save the encrypted package to a folder you can give the recipient. You can move it using a USB drive, shared folder, or another file-moving method.");
+                        if primary(ui, "Save transfer package…", true).clicked() {
                             self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                         }
                     }
                     DeliveryState::WaitingReceipt => {
-                        ui.label(format!("Eject the drive and take it to {name}. Confirmation has not returned yet."));
+                        self.package_delivery(ui, &record);
                         if primary(ui, "Add confirmation from returned drive…", true).clicked() {
                             self.import_confirmation(ui.ctx());
                         }
-                        if ui.button("Copy to another drive…").clicked() {
+                        if ui.button("Save another copy…").clicked() {
                             self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                         }
                     }
@@ -585,7 +634,12 @@ impl RelayApp {
             };
         }
         surface(ui, |ui| {
-            section_label(ui, "TO");
+            ui.horizontal_wrapped(|ui| {
+                section_label(ui, "TO");
+                if ui.button("Add recipient…").clicked() {
+                    self.add_recipient_for(Screen::Send);
+                }
+            });
             let selected = trusted
                 .iter()
                 .find(|c| c.card.fingerprint == self.recipient)
@@ -613,11 +667,12 @@ impl RelayApp {
                 .find(|c| c.card.fingerprint == self.recipient)
             {
                 ui.label(
-                    RichText::new("Safety code checked · ready to exchange")
+                    RichText::new("Safety code checked on this computer")
                         .small()
                         .color(GREEN),
                 );
-                ui.collapsing("Connection details", |ui| {
+                ui.label(RichText::new("This selects who can open the package. It does not establish a live connection.").small().color(MUTED));
+                ui.collapsing("Recipient details", |ui| {
                     fingerprint(ui, &contact.card.fingerprint);
                 });
             }
@@ -742,9 +797,9 @@ impl RelayApp {
         if self.identity.is_none() {
             surface(ui, |ui| {
                 ui.label(RichText::new("Set up this computer first").font(display_font(22.0)));
-                ui.label("The sender needs this computer's connection card before they prepare files for you.");
+                ui.label("The sender needs this computer's public identity card before preparing files for you.");
                 if primary(ui, "Set up this computer", true).clicked() {
-                    self.connect_for(Screen::Receive);
+                    self.computer_open = true;
                 }
             });
             return;
@@ -913,7 +968,6 @@ impl RelayApp {
             self.selected_delivery = self
                 .deliveries
                 .iter()
-                .rev()
                 .min_by_key(|record| {
                     if record.local_error.is_some() || record.state == DeliveryState::Failed {
                         0
@@ -1035,8 +1089,13 @@ impl RelayApp {
                     draw_record(ui, &record);
                     ui.add_space(12.0);
                     if record.direction == Direction::Outgoing
+                        && record.state == DeliveryState::WaitingReceipt
+                    {
+                        self.package_delivery(ui, &record);
+                    }
+                    if record.direction == Direction::Outgoing
                         && record.state == DeliveryState::Ready
-                        && primary(ui, "Copy to drive…", true).clicked()
+                        && primary(ui, "Save transfer package…", true).clicked()
                     {
                         self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                     }
@@ -1062,7 +1121,7 @@ impl RelayApp {
                         if record.direction == Direction::Outgoing
                             && record.state != DeliveryState::Cancelled
                         {
-                            if ui.button("Copy this transfer again…").clicked() {
+                            if ui.button("Save another package copy…").clicked() {
                                 self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                             }
                             if matches!(
@@ -1093,161 +1152,139 @@ impl RelayApp {
         });
     }
 
-    fn people_screen(&mut self, ui: &mut Ui) {
-        page_title(
-            ui,
-            "People",
-            "Connect computers once. Exchange files whenever you need to.",
-        );
-        if self.identity.is_none() {
+    fn recipients_screen(&mut self, ui: &mut Ui) {
+        page_title(ui, "Recipients", "Computers whose public identity you have added here.");
+        if let Some(step) = self.card_step {
             surface(ui, |ui| {
-                if !self.identity_missing {
-                    ui.label(
-                        RichText::new("This computer needs attention")
-                            .font(display_font(22.0))
-                            .color(RED),
-                    );
-                    ui.label("RelayPost could not read its existing setup. Restore an intact profile backup before using this identity again.");
-                    if let Some(error) = &self.identity_error {
-                        ui.collapsing("Technical details", |ui| {
-                            ui.label(error);
-                        });
-                    }
-                    if ui.button("Try reading it again").clicked() {
-                        self.start(ui.ctx(), Action::Refresh);
-                    }
-                    return;
-                }
-                section_label(ui, "STEP 1 · THIS COMPUTER");
-                ui.label(RichText::new("Give this computer a name").font(display_font(24.0)));
-                ui.label("The other person will see this name. RelayPost keeps a private identity here so files can be protected for this computer.");
+                ui.label(RichText::new("Add using identity card").font(display_font(20.0)));
+                ui.label(RichText::new("Use this method to add a computer while offline.").small().color(MUTED));
                 ui.add_space(16.0);
-                ui.label("Computer name");
-                ui.add(
-                    TextEdit::singleline(&mut self.identity_name)
-                        .hint_text("e.g. Morgan's Mac")
-                        .desired_width(ui.available_width()),
-                );
-                password_field(ui, &mut self.password);
-                ui.label("Confirm password");
-                ui.add(
-                    TextEdit::singleline(&mut *self.confirmation)
-                        .password(true)
-                        .desired_width(ui.available_width()),
-                );
-                ui.label(RichText::new("This password protects RelayPost on this computer. There is no online account or password reset.").small().color(MUTED));
-                ui.add_space(16.0);
-                let valid = !self.identity_name.trim().is_empty()
-                    && !self.password.is_empty()
-                    && *self.password == *self.confirmation;
-                if primary(ui, "Set up this computer", valid).clicked() {
-                    let password = self.take_password();
-                    self.confirmation.zeroize();
-                    self.start(
-                        ui.ctx(),
-                        Action::Initialize(self.identity_name.trim().to_owned(), password),
-                    );
+                match step {
+                    CardStep::ShareCard => {
+                        section_label(ui, "IDENTITY CARD · 1 OF 3");
+                        ui.label(RichText::new("Share this computer's identity card").font(display_font(24.0)));
+                        ui.label("Both computers need RelayPost. An identity card is a small public file containing no password or documents. Sharing it does not create a live connection or send files.");
+                        ui.add_space(12.0);
+                        ui.label("Save your card, give it to the other person, and ask them to add it in Recipients. They must also check this computer's complete safety code.");
+                        ui.add_space(20.0);
+                        if primary(ui, "Save my identity card…", true).clicked() {
+                            self.export_my_card(ui.ctx());
+                        }
+                    }
+                    CardStep::OpenCard => {
+                        section_label(ui, "IDENTITY CARD · 2 OF 3");
+                        ui.label(RichText::new("Open their computer's identity card").font(display_font(24.0)));
+                        ui.label("Give them the card you saved. Ask them to save their own card from This computer in RelayPost and share that file with you.");
+                        ui.add_space(12.0);
+                        ui.label("Open their card here. You will check its complete safety code before this computer can prepare files for them.");
+                        ui.add_space(20.0);
+                        if primary(ui, "Open their identity card…", true).clicked() {
+                            self.import_card(ui.ctx());
+                        }
+                        if ui.button("Back").clicked() {
+                            self.card_step = Some(CardStep::ShareCard);
+                        }
+                    }
                 }
-                if !self.confirmation.is_empty() && *self.password != *self.confirmation {
-                    ui.label(RichText::new("Passwords do not match yet.").color(AMBER));
+                if ui.button("Cancel adding recipient").clicked() {
+                    self.card_step = None;
+                    let target = self.recipient_return.take().unwrap_or(Screen::Recipients);
+                    self.switch_screen(target);
                 }
             });
-            self.profile_details(ui);
             return;
         }
-        let card = self.identity.clone().expect("identity checked above");
+        if primary(ui, "Add recipient", true).clicked() {
+            self.add_recipient_for(Screen::Recipients);
+        }
+        ui.add_space(20.0);
+        if self.contacts.is_empty() {
+            ui.label("No recipients yet. Add a computer to protect files for its owner. This list does not show nearby or online devices.");
+            return;
+        }
         surface(ui, |ui| {
-            section_label(ui, "THIS COMPUTER");
+            for contact in self.contacts.clone() {
+                ui.push_id(&contact.card.fingerprint, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(&contact.card.name).font(display_font(19.0)));
+                        ui.label(
+                            RichText::new(if contact.verified { "Safety code checked here" } else { "Safety code needs checking" })
+                                .color(if contact.verified { GREEN } else { AMBER }),
+                        );
+                        if ui.button("Details").clicked() {
+                            self.recipient_details = Some(contact.clone());
+                        }
+                        if !contact.verified && ui.button("Finish setup").clicked() {
+                            self.recipient_return.get_or_insert(Screen::Recipients);
+                            self.trust_contact = Some(contact.clone());
+                            self.trust_fingerprint.clear();
+                        }
+                    });
+                    ui.separator();
+                });
+            }
+        });
+    }
+
+    fn computer_panel(&mut self, ui: &mut Ui) {
+        if let Some(card) = self.identity.clone() {
             ui.label(RichText::new(&card.name).font(display_font(24.0)));
-            ui.label(RichText::new("Ready to connect").color(GREEN));
+            ui.label("This is the identity used by RelayPost on this computer.");
+            ui.add_space(16.0);
+            if ui.button("Save my identity card…").clicked() {
+                self.export_my_card(ui.ctx());
+            }
+            ui.label(RichText::new("The card is public. It contains no password or documents and does not establish a live connection.").small().color(MUTED));
+            ui.add_space(16.0);
             if ui.button("Copy my safety code").clicked() {
                 ui.ctx().copy_text(card.fingerprint.clone());
                 self.notice = "Your complete safety code was copied. Share it through a separate channel you already trust.".to_owned();
             }
-            ui.collapsing("Show my complete safety code", |ui| {
-                fingerprint(ui, &card.fingerprint);
-            });
-            ui.collapsing("Technical connection details", |ui| {
+            ui.collapsing("Show my complete safety code", |ui| fingerprint(ui, &card.fingerprint));
+            ui.add_space(16.0);
+            ui.collapsing("Advanced", |ui| {
                 value(ui, "Encryption public key", &card.age_recipient);
                 value(ui, "Signing public key", &card.signing_public_key);
+                value(ui, "RelayPost data on this computer", &self.home.display().to_string());
+                ui.label("To use this exact storage with the CLI, pass --home followed by this directory. Keep a safe backup; it contains the password-protected private identity.");
             });
-        });
-        ui.add_space(20.0);
-        surface(ui, |ui| {
-            section_label(
-                ui,
-                if self.contacts.iter().any(|c| c.verified) {
-                    "CONNECT ANOTHER COMPUTER"
-                } else {
-                    "STEP 2 · CONNECT THE OTHER COMPUTER"
-                },
-            );
-            ui.label(RichText::new("Exchange connection cards").font(display_font(23.0)));
-            ui.label("Both computers need RelayPost. Connect them once: give your connection card to the other person and ask for theirs. A card is public information and cannot open your files.");
-            ui.add_space(16.0);
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Save my connection card…").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .set_title("Save your RelayPost connection card")
-                        .set_file_name(connection_card_filename(&card.name, &card.fingerprint))
-                        .add_filter("Connection card", &["json"])
-                        .save_file()
-                    {
-                        self.start(ui.ctx(), Action::ExportCard(path));
-                    }
-                }
-                if primary(ui, "Open their connection card…", true).clicked() {
-                    self.import_card(ui.ctx());
-                }
-            });
-            ui.label(RichText::new("After adding the cards, both people check the complete safety codes once. Future handoffs use the saved connection.").small().color(MUTED));
-        });
-        if !self.contacts.is_empty() {
-            ui.add_space(20.0);
-            surface(ui, |ui| {
-                section_label(ui, "YOUR CONNECTIONS");
-                for contact in self.contacts.clone() {
-                    ui.push_id(&contact.card.fingerprint, |ui| {
-                        ui.label(RichText::new(&contact.card.name).font(display_font(19.0)));
-                        ui.label(
-                            RichText::new(if contact.verified {
-                                "Safety code checked · ready to exchange"
-                            } else {
-                                "Safety code not checked"
-                            })
-                            .color(if contact.verified {
-                                GREEN
-                            } else {
-                                AMBER
-                            }),
-                        );
-                        if !contact.verified && ui.button("Check safety code…").clicked() {
-                            self.trust_contact = Some(contact.clone());
-                            self.trust_fingerprint.clear();
-                        }
-                        ui.collapsing("Connection details", |ui| {
-                            fingerprint(ui, &contact.card.fingerprint);
-                        });
-                        ui.add_space(12.0);
-                    });
-                }
-                if self.contacts.iter().any(|c| c.verified)
-                    && primary(ui, "Continue to files", true).clicked()
-                {
-                    let target = self.after_pairing.take().unwrap_or(Screen::Send);
-                    self.switch_screen(target);
-                }
-            });
+            return;
         }
-        self.profile_details(ui);
+        if !self.identity_missing {
+            ui.label(RichText::new("This computer needs attention").font(display_font(22.0)).color(RED));
+            ui.label("RelayPost could not read its existing setup. Restore an intact profile backup before using this identity again.");
+            if let Some(error) = &self.identity_error {
+                ui.collapsing("Technical details", |ui| { ui.label(error); });
+            }
+            if ui.button("Try reading it again").clicked() { self.start(ui.ctx(), Action::Refresh); }
+            return;
+        }
+        ui.label(RichText::new("Give this computer a name").font(display_font(24.0)));
+        ui.label("The other person will see this name. Your password protects the private identity kept here.");
+        ui.add_space(16.0);
+        ui.label("Computer name");
+        ui.add(TextEdit::singleline(&mut self.identity_name).hint_text("e.g. Morgan's Mac").desired_width(ui.available_width()));
+        password_field(ui, &mut self.password);
+        ui.label("Confirm password");
+        ui.add(TextEdit::singleline(&mut *self.confirmation).password(true).desired_width(ui.available_width()));
+        ui.label(RichText::new("There is no online account or password reset.").small().color(MUTED));
+        ui.add_space(16.0);
+        let valid = !self.identity_name.trim().is_empty() && !self.password.is_empty() && *self.password == *self.confirmation;
+        if primary(ui, "Set up this computer", valid).clicked() {
+            let password = self.take_password();
+            self.confirmation.zeroize();
+            self.start(ui.ctx(), Action::Initialize(self.identity_name.trim().to_owned(), password));
+        }
+        if !self.confirmation.is_empty() && *self.password != *self.confirmation {
+            ui.label(RichText::new("Passwords do not match yet.").color(AMBER));
+        }
     }
 
-    fn profile_details(&self, ui: &mut Ui) {
-        ui.add_space(24.0);
-        ui.collapsing("Local storage details", |ui| {
-            value(ui,"RelayPost data on this computer",&self.home.display().to_string());
-            ui.label("To use this exact storage with the CLI, pass --home followed by this directory. Keep a safe backup; it contains the password-protected private identity.");
-        });
+    fn package_delivery(&self, ui: &mut Ui, record: &ParcelRecord) {
+        if let Some((_, path)) = self.last_export.as_ref().filter(|(id, _)| id == &record.parcel_id) {
+            value(ui, "Encrypted package saved to", &path.display().to_string());
+        }
+        ui.label(format!("Give {} the entire encrypted package folder using a USB drive, shared folder, or another file-moving method. They must open it in Receive on their computer. Saving the package here does not send it or confirm delivery.", self.other_name(record)));
     }
 
     fn start_demo(&mut self, context: &egui::Context) {
@@ -1588,7 +1625,7 @@ impl RelayApp {
 
     fn choose_parcel_export(&mut self, context: &egui::Context, id: &str) {
         if let Some(carrier) = rfd::FileDialog::new()
-            .set_title("Choose a USB drive or folder for this transfer")
+            .set_title("Choose where to save the encrypted transfer package")
             .pick_folder()
         {
             self.start(context, Action::ExportParcel(id.to_owned(), carrier));
@@ -1605,6 +1642,46 @@ impl RelayApp {
     }
 
     fn dialogs(&mut self, context: &egui::Context) {
+        if self.computer_open {
+            let mut close = false;
+            egui::Window::new("This computer")
+                .collapsible(false)
+                .resizable(false)
+                .default_width(520.0)
+                .max_height(520.0)
+                .vscroll(true)
+                .show(context, |ui| {
+                    self.messages(ui);
+                    ui.add_enabled_ui(!self.busy(), |ui| {
+                        self.computer_panel(ui);
+                        ui.add_space(16.0);
+                        if ui.button("Close").clicked() { close = true; }
+                    });
+                });
+            if close {
+                self.computer_open = false;
+                self.password.zeroize();
+                self.confirmation.zeroize();
+            }
+        }
+        if let Some(contact) = self.recipient_details.clone() {
+            let mut close = false;
+            egui::Window::new("Recipient details")
+                .collapsible(false)
+                .resizable(false)
+                .default_width(520.0)
+                .max_height(520.0)
+                .vscroll(true)
+                .show(context, |ui| {
+                    ui.label(RichText::new(&contact.card.name).font(display_font(24.0)));
+                    ui.label(if contact.verified { "You checked this computer's complete safety code here." } else { "This computer's complete safety code still needs checking." });
+                    ui.label("This record identifies who can open a package. It does not show whether they are online or whether they have checked your identity.");
+                    ui.add_space(16.0);
+                    ui.collapsing("Complete safety code", |ui| fingerprint(ui, &contact.card.fingerprint));
+                    if ui.button("Close").clicked() { close = true; }
+                });
+            if close { self.recipient_details = None; }
+        }
         if let Some(unlock) = self.unlock.clone() {
             let mut close = false;
             egui::Window::new("Unlock RelayPost").collapsible(false).resizable(false).default_width(440.0).show(context, |ui| {
@@ -1647,22 +1724,26 @@ impl RelayApp {
         }
         if let Some(contact) = self.trust_contact.clone() {
             let mut close = false;
-            egui::Window::new("Check the complete safety code")
+            egui::Window::new("Identity card · Check the complete safety code")
                 .collapsible(false)
                 .resizable(false)
                 .default_width(570.0)
+                .max_height(520.0)
+                .vscroll(true)
                 .show(context, |ui| {
                     ui.add_enabled_ui(!self.busy(), |ui| {
+                        section_label(ui, "IDENTITY CARD · 3 OF 3");
                         ui.label(format!(
-                            "Ask {} to open People on their computer and click Copy my safety code. Get that complete code through a separate channel you already trust, then paste it below. Compare every group with the code shown here.",
+                            "Ask {} to open This computer in the sidebar and click Copy my safety code. Get that complete code through a separate channel you already trust, then paste it below. Compare every group with the code shown here.",
                             contact.card.name
                         ));
                         fingerprint(ui, &contact.card.fingerprint);
+                        ui.label(RichText::new("They must also add your identity card and check your complete safety code on their computer. Checking their code here cannot confirm they have checked yours.").small().color(MUTED));
                         ui.add_space(10.0);
                         ui.label("Paste the complete safety code from their computer (spaces are fine)");
                         ui.add(
                             TextEdit::singleline(&mut self.trust_fingerprint)
-                                .desired_width(f32::INFINITY),
+                                .desired_width(ui.available_width()),
                         );
                         ui.add_space(10.0);
                         ui.horizontal_wrapped(|ui| {
@@ -1673,6 +1754,7 @@ impl RelayApp {
                             )
                             .clicked()
                             {
+                                self.card_step = None;
                                 self.start(
                                     context,
                                     Action::Trust(contact.card.fingerprint.clone()),
@@ -1742,6 +1824,9 @@ impl RelayApp {
                 .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
         {
             self.password.zeroize();
+            self.confirmation.zeroize();
+            self.computer_open = false;
+            self.recipient_details = None;
             self.unlock = None;
             self.trust_contact = None;
             self.trust_fingerprint.clear();
@@ -1753,7 +1838,7 @@ impl RelayApp {
             (egui::Key::Num1, Screen::Send),
             (egui::Key::Num2, Screen::Receive),
             (egui::Key::Num3, Screen::Activity),
-            (egui::Key::Num4, Screen::People),
+            (egui::Key::Num4, Screen::Recipients),
         ] {
             if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, key)) {
                 self.switch_screen(screen);
@@ -1813,13 +1898,13 @@ impl eframe::App for RelayApp {
                         // A maximum is an assignment, not a clamp: never widen a
                         // narrow viewport to the preferred large-window width.
                         ui.set_max_width(ui.available_width().min(content_width));
-                        self.messages(ui);
+                        if !self.computer_open { self.messages(ui); }
                         ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| {
                             match self.screen {
                                 Screen::Send => self.send_screen(ui),
                                 Screen::Receive => self.receive_screen(ui),
                                 Screen::Activity => self.activity_screen(ui),
-                                Screen::People => self.people_screen(ui),
+                                Screen::Recipients => self.recipients_screen(ui),
                                 Screen::Demo => self.demo_screen(ui),
                             }
                         });
@@ -1966,13 +2051,13 @@ fn draw_inspection(ui: &mut Ui, inspection: &Inspection) {
 fn friendly_error(error: &str) -> &'static str {
     let error = error.to_lowercase();
     if error.contains("prepared for another computer") {
-        "This transfer is for a different computer. Ask the sender to prepare a new one using this computer's connection card."
+        "This transfer is for a different computer. Ask the sender to prepare a new one using this computer's identity card."
     } else if error.contains("password") || error.contains("decrypt") {
         "Check the password for this computer and try again. The files have not been accepted by this failed step."
     } else if error.contains("signature") || error.contains("digest") || error.contains("tamper") {
         "This copy could not be authenticated. Ask the sender for a fresh copy before continuing."
     } else if error.contains("trust") || error.contains("contact") || error.contains("sender") {
-        "Open People and connect the sending computer. Both computers must check each other's complete safety codes."
+        "Open Recipients and add the sending computer's identity card. Both computers must check each other's complete safety codes."
     } else if error.contains("repair") || error.contains("shard") {
         "This copy could not be rebuilt. Ask the sender to copy the prepared transfer to the drive again."
     } else if error.contains("regular")
@@ -2002,9 +2087,9 @@ fn state_badge(ui: &mut Ui, state: &DeliveryState) {
 
 fn state_description(state: &DeliveryState) -> &'static str {
     match state {
-        DeliveryState::Ready => "The protected copy is ready to put on a drive.",
+        DeliveryState::Ready => "The encrypted package is prepared here. Save a copy to give the recipient.",
         DeliveryState::WaitingReceipt => {
-            "Copied to a drive. The other computer has not confirmed the save yet."
+            "The encrypted package was copied to a chosen folder. The recipient has not confirmed saving the files yet."
         }
         DeliveryState::SavedReceiptReady => {
             "All files were verified and saved here. Return the confirmation to the sender."
