@@ -378,8 +378,19 @@ impl RelayApp {
 
     fn direct_command(&mut self, command: DirectCommand) -> bool {
         let clear_feedback = !matches!(&command, DirectCommand::ReloadProfile);
+        let switches_from_package = self.last_export.as_ref().is_some_and(|(saved_id, _)| {
+            match &command {
+                DirectCommand::Send { parcel_id, .. } | DirectCommand::Retry { parcel_id } => {
+                    parcel_id == saved_id
+                }
+                _ => false,
+            }
+        });
         match self.direct.command(command) {
             Ok(()) => {
+                if switches_from_package {
+                    self.last_export = None;
+                }
                 if clear_feedback {
                     self.error = None;
                     self.notice.clear();
@@ -1865,13 +1876,21 @@ impl RelayApp {
             );
             return;
         }
+        let package = self.last_export.as_ref().filter(|(id, _)| id == &record.parcel_id);
+        let package_choice = package.is_some();
+        if let Some((_, path)) = package {
+            value(ui, "Encrypted package saved to", &path.display().to_string());
+        }
         if record.state == DeliveryState::Cancelled
             || record.state == DeliveryState::Failed
             || record.local_error.is_some()
         {
             return;
         }
-        if self.queued_sends.contains(&record.parcel_id) {
+        if package_choice {
+            ui.label(format!("Give {} this entire folder using a USB drive, shared folder, or another file-moving method. They must open it in Receive. Saving it here does not send it or confirm delivery.", self.other_name(record)));
+        }
+        if !package_choice && self.queued_sends.contains(&record.parcel_id) {
             ui.spinner();
             ui.label("Direct send requested. Waiting for the local network service…");
             return;
@@ -1883,6 +1902,7 @@ impl RelayApp {
             .find(|transfer| {
                 transfer.parcel_id == record.parcel_id && transfer.recipient == record.recipient
             })
+            .filter(|_| !package_choice)
             .cloned();
         let mut in_progress = false;
         let mut retry_offered = false;
@@ -1906,6 +1926,7 @@ impl RelayApp {
                     ui.label("The encrypted copy arrived. The other person still needs to unlock and save it. Confirmation will return automatically while both apps are open.");
                     in_progress = true;
                 }
+                OutgoingTransferState::WaitingForConfirmation => {}
                 OutgoingTransferState::Confirmed => {
                     ui.label(
                         "The recipient's signed confirmation was verified. Updating local records…",
@@ -1941,7 +1962,7 @@ impl RelayApp {
         if in_progress {
             return;
         }
-        if record.state == DeliveryState::Ready && !retry_offered {
+        if (record.state == DeliveryState::Ready || package_choice) && !retry_offered {
             let peer = self
                 .direct_state
                 .peers
@@ -1950,30 +1971,24 @@ impl RelayApp {
                 .cloned();
             let available =
                 peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
-            if primary(ui, "Send directly", available).clicked() {
+            let send_clicked = if package_choice {
+                available && ui.button("Send directly instead").clicked()
+            } else {
+                primary(ui, "Send directly", available).clicked()
+            };
+            if send_clicked {
                 if let Some(peer) = peer {
                     self.start_direct_send(peer.id, record.parcel_id.clone());
                 }
             }
-            if !available {
+            if !available && !package_choice {
                 ui.label("The recipient is not available on the local network. Keep both apps open on the same network, or use an encrypted package.");
                 if ui.button("Look again").clicked() {
                     self.direct_command(DirectCommand::RefreshDiscovery);
                 }
             }
         }
-        if let Some((_, path)) = self
-            .last_export
-            .as_ref()
-            .filter(|(id, _)| id == &record.parcel_id)
-        {
-            value(
-                ui,
-                "Encrypted package saved to",
-                &path.display().to_string(),
-            );
-            ui.label(format!("Give {} this entire folder using a USB drive, shared folder, or another file-moving method. They must open it in Receive. Saving it here does not send it or confirm delivery.", self.other_name(record)));
-        } else if record.state == DeliveryState::WaitingReceipt {
+        if !package_choice && record.state == DeliveryState::WaitingReceipt {
             ui.label("Waiting for the recipient's signed save confirmation. RelayPost can retrieve it automatically when both apps are open and the recipient is found on the local network.");
         }
         if ui.button("Save encrypted package…").clicked() {
