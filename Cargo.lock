@@ -2551,6 +2551,7 @@ dependencies = [
  "fastrand",
  "flume",
  "if-addrs",
+ "log",
  "mio",
  "socket-pktinfo",
  "socket2",
@@ -3657,6 +3658,7 @@ name = "relay-direct"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "log",
  "mdns-sd",
  "relay-core",
  "serde",

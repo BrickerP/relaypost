@@ -1,5 +1,5 @@
-use crate::wire;
 use crate::diagnostics::Stage;
+use crate::wire;
 use anyhow::Result;
 use mdns_sd::{DaemonEvent, Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
 use std::net::SocketAddrV4;
@@ -95,16 +95,28 @@ impl Discovery {
         for event in self.monitor.try_iter().take(32) {
             match event {
                 DaemonEvent::Error(error) => output.push(Event::Error(error.to_string())),
-                DaemonEvent::Announce(_, _) => output.push(Event::Observed(Stage::Announced, "mDNS daemon emitted an announcement".to_owned())),
+                DaemonEvent::Announce(_, _) => output.push(Event::Observed(
+                    Stage::Announced,
+                    "mDNS daemon emitted an announcement".to_owned(),
+                )),
                 _ => {}
             }
         }
         for event in self.events.try_iter().take(64) {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
-                    output.push(Event::Observed(Stage::Resolved, format!("mDNS resolved service; IPv4 addresses={}", info.get_addresses_v4().len())));
+                    output.push(Event::Observed(
+                        Stage::Resolved,
+                        format!(
+                            "mDNS resolved service; IPv4 addresses={}",
+                            info.get_addresses_v4().len()
+                        ),
+                    ));
                     if info.get_property_val_str("v") != Some("1") {
-                        output.push(Event::Observed(Stage::ProbeDiscarded, "resolved service used an unsupported protocol version".to_owned()));
+                        output.push(Event::Observed(
+                            Stage::ProbeDiscarded,
+                            "resolved service used an unsupported protocol version".to_owned(),
+                        ));
                         continue;
                     }
                     let mut addresses: Vec<_> = info
@@ -124,9 +136,18 @@ impl Discovery {
                     });
                 }
                 ServiceEvent::ServiceRemoved(_, name) => output.push(Event::Removed(name)),
-                ServiceEvent::SearchStarted(_) => output.push(Event::Observed(Stage::SearchStarted, "mDNS browsing started".to_owned())),
-                ServiceEvent::ServiceFound(_, _) => output.push(Event::Observed(Stage::Found, "mDNS found a RelayPost service instance".to_owned())),
-                ServiceEvent::SearchStopped(_) => output.push(Event::Observed(Stage::SearchStopped, "mDNS browsing stopped".to_owned())),
+                ServiceEvent::SearchStarted(_) => output.push(Event::Observed(
+                    Stage::SearchStarted,
+                    "mDNS browsing started".to_owned(),
+                )),
+                ServiceEvent::ServiceFound(_, _) => output.push(Event::Observed(
+                    Stage::Found,
+                    "mDNS found a RelayPost service instance".to_owned(),
+                )),
+                ServiceEvent::SearchStopped(_) => output.push(Event::Observed(
+                    Stage::SearchStopped,
+                    "mDNS browsing stopped".to_owned(),
+                )),
                 _ => {}
             }
         }

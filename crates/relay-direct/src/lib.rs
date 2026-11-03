@@ -1,7 +1,7 @@
 //! Local-network discovery and transport. Trust, saved files and confirmation
 //! remain exclusively under relay-core's authenticated parcel/receipt rules.
-mod discovery;
 mod diagnostics;
+mod discovery;
 mod engine;
 mod wire;
 
@@ -9,8 +9,8 @@ use relay_core::{Inspection, PeerCard, Profile};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use engine::DirectHandle;
 pub use diagnostics::{DirectDiagnostics, NetworkDiagnosticEvent};
+pub use engine::DirectHandle;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PeerId(pub String);
