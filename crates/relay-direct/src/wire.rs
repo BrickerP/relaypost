@@ -126,7 +126,9 @@ impl Stream {
             deadline: Instant::now() + CONTROL_DEADLINE,
         })
     }
-    pub fn begin_bundle(&mut self) { self.deadline = Instant::now() + DEADLINE; }
+    pub fn begin_bundle(&mut self) {
+        self.deadline = Instant::now() + DEADLINE;
+    }
 
     fn remaining(&self) -> std::io::Result<Duration> {
         self.deadline

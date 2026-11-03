@@ -304,7 +304,10 @@ impl Profile {
             offers.push(StagedDirectParcel {
                 parcel_path: entry.path(),
                 inspection,
-                offer: offer_details(&authenticated, bundle_length(&bundle_entries(&authenticated))?),
+                offer: offer_details(
+                    &authenticated,
+                    bundle_length(&bundle_entries(&authenticated))?,
+                ),
             });
         }
         offers.sort_by(|a, b| a.inspection.parcel_id.cmp(&b.inspection.parcel_id));

@@ -380,9 +380,12 @@ impl RelayApp {
         let clear_feedback = !matches!(&command, DirectCommand::ReloadProfile);
         match self.direct.command(command) {
             Ok(()) => {
-                if clear_feedback { self.error = None; self.notice.clear(); }
+                if clear_feedback {
+                    self.error = None;
+                    self.notice.clear();
+                }
                 true
-            },
+            }
             Err(error) => {
                 self.error = Some(format!("The local network action could not start: {error}"));
                 false
@@ -428,23 +431,32 @@ impl RelayApp {
         if self.busy() || self.modal_open() {
             return;
         }
-        let Some(task) = &self.pairing_task else { return };
+        let Some(task) = &self.pairing_task else {
+            return;
+        };
         match &task.wait {
             PairingWait::Peer(peer) => {
-                let attempt = self.direct_state.pairing_attempts.iter().find(|attempt| &attempt.peer == peer && attempt.card.fingerprint == task.fingerprint);
+                let attempt = self.direct_state.pairing_attempts.iter().find(|attempt| {
+                    &attempt.peer == peer && attempt.card.fingerprint == task.fingerprint
+                });
                 match attempt.map(|attempt| &attempt.state) {
                     Some(PairingAttemptState::PeerAccepted) => {}
                     Some(PairingAttemptState::Declined) => {
-                        self.error = Some("The other person declined this identity request.".to_owned());
+                        self.error =
+                            Some("The other person declined this identity request.".to_owned());
                         self.pairing_task = None;
                         return;
                     }
                     Some(PairingAttemptState::Failed { message, .. }) => {
-                        self.error = Some(format!("This identity request could not finish: {message}"));
+                        self.error =
+                            Some(format!("This identity request could not finish: {message}"));
                         self.pairing_task = None;
                         return;
                     }
-                    None if !self.direct_state.peers.iter().any(|nearby| &nearby.id == peer && nearby.card.fingerprint == task.fingerprint) => {
+                    None if !self.direct_state.peers.iter().any(|nearby| {
+                        &nearby.id == peer && nearby.card.fingerprint == task.fingerprint
+                    }) =>
+                    {
                         self.error = Some("This identity request stopped because the device is no longer nearby. Look for it again or use an identity card.".to_owned());
                         self.pairing_task = None;
                         return;
@@ -453,12 +465,15 @@ impl RelayApp {
                 }
             }
             PairingWait::Import(request) => {
-                let status = self.direct_state.incoming_pairings.iter().find(|incoming| &incoming.id == request && incoming.card.fingerprint == task.fingerprint);
+                let status = self.direct_state.incoming_pairings.iter().find(|incoming| {
+                    &incoming.id == request && incoming.card.fingerprint == task.fingerprint
+                });
                 match status.map(|incoming| &incoming.state) {
                     Some(IncomingPairingState::Accepted) => {}
                     Some(IncomingPairingState::AwaitingDecision) => return,
                     Some(IncomingPairingState::Failed { message }) => {
-                        self.error = Some(format!("This identity request could not finish: {message}"));
+                        self.error =
+                            Some(format!("This identity request could not finish: {message}"));
                         self.pairing_task = None;
                         return;
                     }
@@ -1452,8 +1467,17 @@ impl RelayApp {
         if primary(ui, "Add recipient", true).clicked() {
             self.add_recipient_for(Screen::Recipients);
         }
-        let pending_requests = self.direct_state.incoming_pairings.iter().filter(|request| matches!(request.state, IncomingPairingState::AwaitingDecision)).count();
-        if pending_requests > 0 && ui.button(format!("Review device requests ({pending_requests})")).clicked() {
+        let pending_requests = self
+            .direct_state
+            .incoming_pairings
+            .iter()
+            .filter(|request| matches!(request.state, IncomingPairingState::AwaitingDecision))
+            .count();
+        if pending_requests > 0
+            && ui
+                .button(format!("Review device requests ({pending_requests})"))
+                .clicked()
+        {
             self.add_recipient_for(Screen::Recipients);
         }
         ui.add_space(20.0);
@@ -1509,7 +1533,13 @@ impl RelayApp {
             self.direct_command(DirectCommand::RefreshDiscovery);
         }
         for request in self.direct_state.incoming_pairings.clone() {
-            if matches!(request.state, IncomingPairingState::Accepted) && self.contacts.iter().any(|contact| contact.card.fingerprint == request.card.fingerprint && contact.verified) { continue; }
+            if matches!(request.state, IncomingPairingState::Accepted)
+                && self.contacts.iter().any(|contact| {
+                    contact.card.fingerprint == request.card.fingerprint && contact.verified
+                })
+            {
+                continue;
+            }
             let scope = egui::Id::new(("incoming_pairing", &request.id));
             ui.push_id(scope, |ui| {
                 ui.separator();
@@ -1540,7 +1570,13 @@ impl RelayApp {
             });
         }
         for attempt in self.direct_state.pairing_attempts.clone() {
-            if matches!(attempt.state, PairingAttemptState::PeerAccepted) && self.contacts.iter().any(|contact| contact.card.fingerprint == attempt.card.fingerprint && contact.verified) { continue; }
+            if matches!(attempt.state, PairingAttemptState::PeerAccepted)
+                && self.contacts.iter().any(|contact| {
+                    contact.card.fingerprint == attempt.card.fingerprint && contact.verified
+                })
+            {
+                continue;
+            }
             let scope = egui::Id::new(("pairing_attempt", &attempt.peer));
             ui.push_id(scope, |ui| {
             ui.separator();
@@ -1607,7 +1643,11 @@ impl RelayApp {
     }
 
     fn finish_identity_check(&mut self, ui: &mut Ui, fingerprint: &str) {
-        let contact = self.contacts.iter().find(|contact| contact.card.fingerprint == fingerprint).cloned();
+        let contact = self
+            .contacts
+            .iter()
+            .find(|contact| contact.card.fingerprint == fingerprint)
+            .cloned();
         if let Some(contact) = contact {
             if !contact.verified && ui.button("Check complete safety code").clicked() {
                 self.recipient_return.get_or_insert(Screen::Recipients);
@@ -1648,7 +1688,13 @@ impl RelayApp {
     }
 
     fn direct_attention(&mut self, ui: &mut Ui) {
-        if self.screen != Screen::Recipients && self.direct_state.incoming_pairings.iter().any(|request| matches!(request.state, IncomingPairingState::AwaitingDecision)) {
+        if self.screen != Screen::Recipients
+            && self
+                .direct_state
+                .incoming_pairings
+                .iter()
+                .any(|request| matches!(request.state, IncomingPairingState::AwaitingDecision))
+        {
             ui.horizontal_wrapped(|ui| {
                 ui.label("A nearby device wants to exchange identity cards.");
                 if ui.button("Review request").clicked() {
