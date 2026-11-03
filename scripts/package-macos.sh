@@ -20,10 +20,23 @@ python3 scripts/release-metadata.py prepare --target aarch64-apple-darwin --meta
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary_dir/relay-desktop" "$app/Contents/MacOS/relay-desktop"
 cp "$binary_dir/relaypost" "$app/Contents/MacOS/relaypost"
-for file in RELEASE.json BUILD_INFO LICENSE README.md QUICK_START.md INSTALL.md DEMO.md RELEASE.md THIRD_PARTY_NOTICES.md DEPENDENCIES.json; do
+for file in RELEASE.json BUILD_INFO LICENSE README.md QUICK_START.md INSTALL.md DEMO.md RELEASE.md THIRD_PARTY_NOTICES.md DEPENDENCIES.json BUNDLED_FONTS.json; do
   cp "$package/$file" "$app/Contents/Resources/$file"
 done
 if [[ -d "$package/licenses" ]]; then cp -R "$package/licenses" "$app/Contents/Resources/licenses"; fi
+python3 - "$package" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+package = Path(sys.argv[1])
+manifest = json.loads((package / "BUNDLED_FONTS.json").read_text())
+binary = (package / "RelayPost.app/Contents/MacOS/relay-desktop").read_bytes()
+for file in manifest["files"]:
+    if file["kind"] == "font":
+        if Path(file["path"]).read_bytes() not in binary:
+            raise SystemExit(f"Prebuilt desktop executable does not embed {file['path']}")
+PY
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

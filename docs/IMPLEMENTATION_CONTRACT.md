@@ -86,7 +86,7 @@ public DTO, four phases, isolation and evidence requirements are defined in
 run uses a fresh private root, synthetic profiles and real production APIs.
 The JSON report is an unsigned evidence summary; the return receipt is signed.
 
-Use English UI and help, 4 screens: Send, Receive, History, Identity & Contacts. Show real group health and outcomes, no fake progress/results. Keep expensive work off the UI thread.
+Use English UI and help with task-based Home, Send, Receive, Activity, and People destinations. The guided walkthrough remains available from Help rather than primary navigation. First use must connect device setup, exchanging connection cards, full safety-code comparison, and the intended send/receive task with explicit next actions. Selecting a carried transfer starts its inspection automatically. Confirmation return is a primary task rather than a hidden history operation. Put paths, protocol identifiers, shard diagnostics, and original errors in expandable details; preserve real group health and every recovery action. Never imply remote progress or confirmation without evidence. Keep expensive work off the UI thread.
 
 CLI shape: global --home; identity init/export, contacts import/trust/list, seal --to, export --carrier, inspect, receive, receipt export/import, deliveries, recover, cancel. `recover --discard-incomplete` performs only explicit staging discard and prints `discarded_staging`; no password is needed. Desktop discard requires a confirmation dialog. History selections use `(parcel_id, direction)` and show local-copy health separately. Password through masked interactive input, --password-stdin, or a password file; never a plaintext password argument. Structured --json output must not contain secrets.
 

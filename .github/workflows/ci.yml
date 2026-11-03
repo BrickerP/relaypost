@@ -181,13 +181,13 @@ jobs:
         with:
           key: macos-arm64-native
           cache-on-failure: true
-      - name: Test core and CLI on the native publication implementation
+      - name: Test core, CLI and desktop task logic on macOS
         shell: bash
         run: |
           set -o pipefail
           mkdir -p ci-logs
           uname -a | tee ci-logs/platform.log
-          cargo test --locked -p relay-core -p relay-cli --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+          cargo test --locked -p relay-core -p relay-cli -p relay-desktop --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
       - name: Build the CLI and native application
         shell: bash
         run: |

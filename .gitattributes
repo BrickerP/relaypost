@@ -1,2 +1,4 @@
 # Keep upstream legal text byte-for-byte, including its supplied EOF layout.
 third-party/licenses/** -text whitespace=-blank-at-eof
+crates/relay-desktop/assets/fonts/*.ttf -text
+crates/relay-desktop/assets/fonts/OFL.txt -text whitespace=-blank-at-eof,-blank-at-eol

@@ -201,6 +201,72 @@ def collect_notices(metadata, roots, destination, catalog):
     (destination / "DEPENDENCIES.json").write_text(json.dumps(inventory, indent=2) + "\n")
 
 
+def collect_desktop_font_notices(destination):
+    document = json.loads((ROOT / "third-party/desktop-fonts.json").read_text())
+    commit = document["upstream_commit"]
+    if (
+        document.get("schema_version") != 1
+        or document["license"] != "OFL-1.1"
+        or not re.fullmatch(r"[0-9a-f]{40}", commit)
+        or not re.fullmatch(r"[a-z0-9-]+", document["id"])
+    ):
+        raise SystemExit("Invalid pinned desktop font catalog")
+    kinds = [file["kind"] for file in document["files"]]
+    if kinds.count("license") != 1 or kinds.count("font") < 1 or set(kinds) != {"font", "license"}:
+        raise SystemExit("Desktop fonts require font data and one complete license")
+    license_directory = destination / "licenses" / document["id"]
+    license_directory.mkdir(parents=True)
+    files = []
+    for file in document["files"]:
+        relative = PurePosixPath(file["path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise SystemExit("Desktop font paths must be relative to the repository")
+        path = (ROOT / file["path"]).resolve()
+        path.relative_to(ROOT)
+        data = path.read_bytes()
+        if (
+            len(data) != file["size"]
+            or hashlib.sha256(data).hexdigest() != file["sha256"]
+            or not file["source_url"].startswith("https://")
+            or f"/{commit}/" not in file["source_url"]
+        ):
+            raise SystemExit(f"Pinned desktop font source mismatch: {file['path']}")
+        record = dict(file)
+        if file["kind"] == "license":
+            output = license_directory / "OFL.txt"
+            shutil.copyfile(path, output)
+            record["packaged_path"] = output.relative_to(destination).as_posix()
+            copyright_notice = data.decode("utf-8").splitlines()[0]
+            license_path = record["packaged_path"]
+        else:
+            record["embedded_in"] = "RelayPost.app/Contents/MacOS/relay-desktop"
+        files.append(record)
+    relative = PurePosixPath(document["source_record"])
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit("Desktop font provenance path must be relative to the repository")
+    source = (ROOT / document["source_record"]).resolve()
+    source.relative_to(ROOT)
+    output = license_directory / "SOURCE.md"
+    shutil.copyfile(source, output)
+    source_record = {
+        "path": document["source_record"],
+        "packaged_path": output.relative_to(destination).as_posix(),
+        "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+    }
+    manifest = {**document, "files": files, "source_record": source_record}
+    (destination / "BUNDLED_FONTS.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    styles = ", ".join(file["style"] for file in files if file["kind"] == "font")
+    with (destination / "THIRD_PARTY_NOTICES.md").open("a") as stream:
+        stream.write(
+            f"\n## Embedded desktop font: {document['family']}\n\n"
+            f"The native desktop executable embeds unmodified {styles} font data.\n\n"
+            f"{copyright_notice}\n\n"
+            f"License: [{document['license']} — complete original text]({license_path}). "
+            f"[Pinned source record]({source_record['packaged_path']}) and "
+            "[font file hashes and provenance](BUNDLED_FONTS.json).\n"
+        )
+
+
 def prepare(args):
     target = TARGETS[args.target]
     destination = Path(args.output)
@@ -248,6 +314,8 @@ def prepare(args):
         else:
             shutil.copyfile(source_path, destination / name)
     collect_notices(metadata, target["packages"], destination, load_license_catalog())
+    if "relay-desktop" in target["packages"]:
+        collect_desktop_font_notices(destination)
     toolchain_licenses = Path(os.environ["RUST_LICENSE_DIR"])
     for name in ("COPYRIGHT.html", "COPYRIGHT-library.html"):
         source = toolchain_licenses / name

@@ -1,35 +1,41 @@
 # RelayPost / 驿站
 
-**Carry encrypted files offline. Repair damaged pieces. Verify their arrival.**
+**Send files offline. Know when the other computer saved them.**
 
-RelayPost revives UUCP's store-and-forward idea as a Rust CLI and native desktop
-tool. Two devices exchange public identity cards once, pin complete fingerprints,
-and carry encrypted parcels through a USB drive or any ordinary directory. They
-never need to be online together. A signed return receipt confirms a verified
-recipient commit.
+RelayPost helps you carry protected files between computers on a USB drive or an
+ordinary folder. It checks a carried copy, repairs damage within its recovery
+budget, and brings back confirmation that the other computer saved the files.
+Both computers use RelayPost; they never need to be online together.
+
+The native desktop app and CLI share one Rust core. The design revives UUCP's
+store-and-forward idea with recipient encryption and a signed return receipt.
 
 ## Install and try it
 
-RelayPost 0.2.0 provides an Apple Silicon macOS app with a bundled CLI and an
+RelayPost 0.3.0 provides an Apple Silicon macOS app with a bundled CLI and an
 Ubuntu 24.04 x86_64 Linux CLI archive. Rust, Python and a source checkout are not
 needed to run the packages. See the [three-step installation guide](docs/INSTALL.md).
 
 1. Download the platform archive and its SHA-256 file from the versioned
    [GitHub Release](https://github.com/BrickerP/relaypost/releases) when published.
    Before publication, a successful [Verify and package run](https://github.com/BrickerP/relaypost/actions/workflows/ci.yml)
-   supplies `relaypost-0.2.0-candidate` for review. An Actions artifact is not the
+   supplies `relaypost-0.3.0-candidate` for review. An Actions artifact is not the
    final public distribution link.
-2. Verify the archive, extract it and run its included `verify-package.sh` as shown
-   in the installation guide. On macOS, move `RelayPost.app` into Applications and
-   open it using the normal macOS approval flow if prompted.
-3. Choose **Try guided demo** in the app, or run `relaypost demo --output NEW_DIRECTORY`.
-   The shared Rust core takes two disposable synthetic identities through
-   sealing, damaged-carrier inspection, repair and a signed return receipt.
+2. On macOS, double-click the ZIP, move `RelayPost.app` into Applications, and
+   open it. The desktop app does not require Terminal. Optional checksum and
+   package-verification commands are in the installation guide.
+3. Start on **Home**. Set up this computer and follow the next-action card to
+   connect the other computer. To try a disposable sample first, open
+   **Help & walkthrough** and choose **Start a new walkthrough**. CLI users can
+   run `relaypost demo --output NEW_DIRECTORY`.
 
-For real files, create identities in **Identity & Contacts**, exchange public
-cards, compare the complete fingerprints through a trusted channel, and pin
-trust on both devices. In **Send**, seal and export to a carrier directory. The
-recipient uses **Receive** to save it and returns the exported signed receipt.
+For your own files, **People** walks through sharing connection cards and
+checking each computer's complete safety code. Both computers must check the
+other before exchanging files. **Send files** prepares a transfer and copies it
+to your chosen drive or folder. **Receive files** finds a transfer there,
+checks it automatically and saves the verified files. Put its confirmation on
+the drive and bring it back. **Home** offers the waiting sender a direct action
+to add that confirmation. Copying to a drive alone is never shown as delivered.
 
 The macOS app is built for Apple Silicon/macOS 12+ and exercised on macOS 15;
 macOS 12 itself has not been tested. It is ad-hoc signed, without Developer ID
@@ -54,7 +60,7 @@ inventory and supplied third-party notices; see [release provenance](docs/RELEAS
 | Receive | Authenticate the trusted sender, reconstruct ciphertext, check its SHA-256, decrypt, validate every file, and publish one complete batch with an OS-exclusive rename. |
 | Confirm | Save a receipt signed by the expected recipient only after commit. The sender stays `WaitingReceipt` until the returned receipt verifies. |
 
-**History** shows local delivery records, recovery results and cancellation.
+**Activity** shows local delivery records, recovery results and cancellation.
 Re-importing the same parcel verifies and reuses its committed batch. Recovery
 rebuilds a missing index or receipt from verified published files; changed files
 produce a conflict. A damaged local outbox copy has its own health warning;
@@ -64,7 +70,7 @@ confirmation to be recovered even when the local outbox copy is gone.
 
 Recovery also resumes fully verified receive stages and removes superseded
 temporary copies after checking the published batch. Partial or conflicting
-stages remain pending. **Discard interrupted receive work** in History offers an
+stages remain pending. Discarding interrupted receive work in **Activity** offers an
 explicit confirmation, or use `relaypost recover --discard-incomplete` to discard
 only managed receive staging. This command requires no password. Import the
 parcel again from its carrier when you want to retry it.
