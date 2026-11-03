@@ -560,6 +560,7 @@ impl RelayApp {
                             },
                         ))
                         .fill(if selected { TEAL } else { Color32::TRANSPARENT })
+                        .stroke(egui::Stroke::NONE)
                         .min_size(egui::vec2(ui.available_width(), 44.0));
                     if ui
                         .add_enabled(!self.busy() && !self.modal_open(), button)
@@ -601,7 +602,8 @@ impl RelayApp {
                                 .size(13.0)
                                 .color(Color32::from_rgb(187, 211, 205)),
                         )
-                        .fill(Color32::TRANSPARENT),
+                        .fill(Color32::TRANSPARENT)
+                        .stroke(egui::Stroke::NONE),
                     )
                     .clicked()
                 {
