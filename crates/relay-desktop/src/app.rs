@@ -1666,7 +1666,7 @@ impl RelayApp {
         }
         ui.add_space(16.0);
         if self.direct_state.peers.is_empty() {
-            ui.label("No nearby devices found yet. Keep both apps open, or add the other computer using its identity card.");
+            ui.label("No nearby devices found yet. Keep RelayPost open on both computers on the same local network. If macOS asks for Local Network access, choose Allow.");
         }
         for peer in self.direct_state.peers.clone() {
             ui.push_id(&peer.id, |ui| {
