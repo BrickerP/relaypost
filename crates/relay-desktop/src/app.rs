@@ -2494,7 +2494,7 @@ impl RelayApp {
         }
         if let Some(contact) = self.trust_contact.clone() {
             let mut close = false;
-            egui::Window::new("Identity card · Check the complete safety code")
+            egui::Window::new("Check the complete safety code")
                 .collapsible(false)
                 .resizable(false)
                 .default_width(570.0)
@@ -2502,19 +2502,22 @@ impl RelayApp {
                 .vscroll(true)
                 .show(context, |ui| {
                     ui.add_enabled_ui(!self.busy(), |ui| {
-                        section_label(ui, "IDENTITY CARD · 3 OF 3");
                         ui.label(format!(
                             "Each person copies their own safety code in this dialog. Exchange codes face to face or through an existing trusted channel, then paste {}'s complete code below. Compare every group with the code shown here.",
                             contact.card.name
                         ));
                         if let Some(own) = &self.identity {
                             ui.horizontal_wrapped(|ui| {
-                                ui.label(RichText::new("THIS COMPUTER").small().color(MUTED));
+                                ui.label(RichText::new("Your code to share").small().color(MUTED));
                                 if ui.button("Copy my safety code").clicked() {
                                     ui.ctx().copy_text(own.fingerprint.clone());
                                 }
                             });
                         }
+                        ui.label(
+                            RichText::new(format!("{}'s safety code · code to check", contact.card.name))
+                                .strong(),
+                        );
                         fingerprint(ui, &contact.card.fingerprint);
                         ui.label(RichText::new("They must also add your identity card and check your complete safety code on their computer. Checking their code here cannot confirm they have checked yours.").small().color(MUTED));
                         ui.add_space(10.0);
