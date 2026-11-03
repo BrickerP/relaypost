@@ -78,6 +78,9 @@ static MEDIUM_BYTES: &[u8] = include_bytes!("../assets/fonts/AtkinsonHyperlegibl
 ///
 /// No new crates are required; all APIs are from eframe/egui 0.31.1.
 pub fn configure(context: &egui::Context) {
+    // Apply the product's light palette before choosing the active style. OS
+    // theme discovery can otherwise switch away from the styled theme at startup.
+    context.set_theme(egui::ThemePreference::Light);
     // --- Visuals -----------------------------------------------------------
     // Start from the egui light preset, then override specific fields.
     // Matches the pattern used by the existing configure_style in app.rs.

@@ -47,6 +47,10 @@ After reviewing Kiro's modules, Codex set consistent rounded widget/primary
 button corners and changed the source headers to make remote validation's
 pending status explicit. Codex also added explicit Done / Current step / Not yet
 text to the ribbon, so phase meaning does not depend on color or painted marks.
+An actual CI-built desktop inspection also found that startup theme discovery
+could leave default heading sizes and control spacing active. Codex fixed the
+theme preference before configuring its active style; this is a runtime-review
+amendment, not an additional Kiro-authored change.
 Static review additionally fixed wrong-recipient
 inspection, local-copy attention priority, failed-receive confirmation gating,
 cached receive-state refresh and modal navigation isolation. These amendments
