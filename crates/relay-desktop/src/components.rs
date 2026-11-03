@@ -83,6 +83,7 @@ pub fn primary(ui: &mut Ui, text: &str, enabled: bool) -> egui::Response {
         .color(Color32::WHITE);
 
     let button = egui::Button::new(label)
+        .wrap()
         .fill(fill)
         .corner_radius(10)
         .min_size(Vec2::new(0.0, 44.0));
@@ -117,8 +118,8 @@ const PHASE_LABELS: [&str; 4] = ["Prepared", "Copied to drive", "Files saved", "
 /// `stage` is 0-based:
 /// - Phases with index < `stage` are **completed** — solid TEAL circle with a
 ///   simple checkmark.
-/// - The phase with index == `stage` is **current** — solid TEAL circle, bold
-///   INK label.
+/// - The phase with index == `stage` is **current**, unless it is the final,
+///   verified confirmation. That terminal phase is complete too.
 /// - Phases with index > `stage` are **future** — hollow LINE circle, MUTED
 ///   label.
 ///
@@ -135,9 +136,10 @@ const PHASE_LABELS: [&str; 4] = ["Prepared", "Copied to drive", "Files saved", "
 pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
     let stage = stage.min(PHASE_LABELS.len().saturating_sub(1));
     let n = PHASE_LABELS.len();
+    let complete = stage == n - 1;
 
     // Distribute phases evenly across the available width.
-    let available_width = ui.available_width().max(300.0);
+    let available_width = ui.available_width().max(0.0);
     let phase_width = available_width / n as f32;
 
     // Layout measurements.
@@ -176,7 +178,7 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
         let cx = ribbon_rect.left() + phase_width * (i as f32 + 0.5);
         let center = egui::pos2(cx, circle_y);
 
-        if i < stage {
+        if i < stage || complete {
             // Completed — solid TEAL with a white checkmark.
             painter.circle_filled(center, circle_r, TEAL);
             let arm = circle_r * 0.33;
@@ -216,7 +218,7 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
 
     // ── Phase labels (normal egui labels for accessibility) ───────────────
     for (i, label) in PHASE_LABELS.iter().enumerate() {
-        let is_current = i == stage;
+        let is_current = i == stage && !complete;
         let is_future = i > stage;
 
         let text_color = if is_future {
@@ -246,7 +248,9 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
         let rich = if is_current { rich.strong() } else { rich };
         child.label(rich);
         child.label(
-            RichText::new(if i < stage {
+            RichText::new(if complete && i == stage {
+                "Complete"
+            } else if i < stage {
                 "Done"
             } else if is_current {
                 "Current step"

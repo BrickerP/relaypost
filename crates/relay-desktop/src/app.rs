@@ -436,7 +436,7 @@ impl RelayApp {
 
     fn messages(&mut self, ui: &mut Ui) {
         if let Some(pending) = &self.pending {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spinner();
                 ui.label(RichText::new(pending.label).color(TEAL));
             });
@@ -659,7 +659,7 @@ impl RelayApp {
                     .max_height(190.0)
                     .show(ui, |ui| {
                         for (index, input) in self.inputs.iter().enumerate() {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 ui.label(
                                     input
                                         .file_name()
@@ -795,10 +795,7 @@ impl RelayApp {
                 ));
                 draw_record(ui, &result.record);
                 if result.repaired_shards > 0 {
-                    ui.label(format!(
-                        "{} damaged pieces were repaired automatically.",
-                        result.repaired_shards
-                    ));
+                    ui.label(format!("Damaged pieces repaired: {}", result.repaired_shards));
                 }
                 ui.add_space(16.0);
                 if self.receipt_exported.contains(&result.record.parcel_id) {
@@ -851,7 +848,7 @@ impl RelayApp {
                         "The sender and this copy were checked. Your files are ready to save."
                             .to_owned()
                     } else {
-                        format!("{missing} missing or damaged pieces can be rebuilt automatically.")
+                        format!("Missing or damaged pieces: {missing}. This copy can be rebuilt automatically.")
                     });
                     ui.add_space(16.0);
                     if primary(ui, "Save files on this computer", true).clicked() {
@@ -897,7 +894,7 @@ impl RelayApp {
                 ui.label(RichText::new("Choose a transfer to check").font(display_font(21.0)));
                 ui.label("These folders have not been authenticated yet. The next step checks the sender and contents.");
                 for (index, path) in self.transfer_candidates.clone().iter().enumerate() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(format!("Transfer {}", index + 1));
                         ui.label(
                             RichText::new(short(
@@ -922,11 +919,14 @@ impl RelayApp {
             "Activity",
             "See what is ready, what needs carrying, and what is confirmed.",
         );
-        ui.horizontal(|ui| {
+        let waiting_for_confirmation = self.deliveries.iter().any(|record| {
+            record.direction == Direction::Outgoing && record.state == DeliveryState::WaitingReceipt
+        });
+        ui.horizontal_wrapped(|ui| {
             if ui.button("Refresh").clicked() {
                 self.start(ui.ctx(), Action::Refresh);
             }
-            if ui.button("Add confirmation from drive…").clicked() {
+            if waiting_for_confirmation && ui.button("Add confirmation from drive…").clicked() {
                 self.import_confirmation(ui.ctx());
             }
         });
@@ -1445,7 +1445,7 @@ impl RelayApp {
             "Guided walkthrough",
             "One Mac, two synthetic devices, a directory as the carrier. No user files or physical USB required.",
         );
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new("2 generated files / 21 MiB (20 + 1 MiB)").color(MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
@@ -1772,7 +1772,7 @@ impl RelayApp {
                 ui.label("Enter the password you set for this computer. It is used only for this step.");
                 password_field(ui,&mut self.password);
                 let label=match unlock { Unlock::Prepare=>"Prepare protected transfer", Unlock::Receive(_)=>"Save files on this computer", Unlock::Recover=>"Verify and recover" };
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if primary(ui,label,!self.password.is_empty()).clicked() {
                         let password=self.take_password();
                         let action=match unlock.clone() {
@@ -1794,7 +1794,7 @@ impl RelayApp {
             egui::Window::new("Choose a returned confirmation").collapsible(false).resizable(false).default_width(480.0).show(context, |ui| {
                 ui.label("RelayPost found several confirmation folders. Each one is verified before it can confirm a delivery.");
                 for (index,path) in self.receipt_candidates.clone().iter().enumerate() {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(format!("Confirmation {}",index+1));
                         ui.label(RichText::new(short(&path.file_name().unwrap_or_default().to_string_lossy())).small().color(MUTED));
                         if ui.add_enabled(!self.busy(),egui::Button::new("Verify")).clicked() { self.start(context,Action::ImportReceipt(path.clone())); close=true; }
@@ -1826,7 +1826,7 @@ impl RelayApp {
                                 .desired_width(f32::INFINITY),
                         );
                         ui.add_space(10.0);
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if primary(
                                 ui,
                                 "The complete code matches",
@@ -1857,7 +1857,7 @@ impl RelayApp {
                 ui.add_enabled_ui(!self.busy(), |ui| {
                     ui.label("This stops local re-export of this parcel. It cannot recall copies already on a carrier and does not delete the original source files.");
                     value(ui, "Parcel", &id);
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         if ui.button(RichText::new("Stop future copies").color(RED)).clicked() {
                             self.start(context, Action::Cancel(id.clone()));
                             close = true;
@@ -1879,7 +1879,7 @@ impl RelayApp {
                 .show(context, |ui| {
                     ui.add_enabled_ui(!self.busy(), |ui| {
                         ui.label("Delete unfinished temporary receive data in this profile. Import the parcel again from your carrier when you want to receive it.");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             if ui.button(RichText::new("Discard interrupted work").color(RED)).clicked() {
                                 self.start(context, Action::DiscardIncomplete);
                                 close = true;
@@ -1966,8 +1966,15 @@ impl eframe::App for RelayApp {
                     .inner_margin(egui::Margin::symmetric(32, 28)),
             )
             .show(context, |ui| {
-                egui::ScrollArea::vertical().id_salt("page").show(ui, |ui| {
-                    ui.set_max_width(860.0);
+                let content_width = ui.available_width().min(860.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("page")
+                    .max_width(content_width)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                    // A maximum is an assignment, not a clamp: never widen a
+                    // narrow viewport to the preferred large-window width.
+                    ui.set_max_width(ui.available_width().min(content_width));
                     self.messages(ui);
                     ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| match self.screen {
                         Screen::Home => self.home_screen(ui),

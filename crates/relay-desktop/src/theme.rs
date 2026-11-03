@@ -87,6 +87,7 @@ pub fn configure(context: &egui::Context) {
     context.set_visuals(egui::Visuals::light());
 
     let mut style = (*context.style()).clone();
+    style.wrap_mode = Some(egui::TextWrapMode::Wrap);
     style.visuals.override_text_color = Some(INK);
     style.visuals.selection.bg_fill = Color32::from_rgb(0xD0, 0xE8, 0xE0);
     style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, TEAL);
