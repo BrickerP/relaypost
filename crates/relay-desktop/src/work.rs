@@ -187,7 +187,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let inspection = profile.inspect_parcel(path)?;
             let file_bytes = directory_file_bytes(path)?;
             (
-                "Your transfer is prepared. Choose a drive or folder to copy it.".to_owned(),
+                "Your files are protected for the selected recipient.".to_owned(),
                 Payload::Sealed(Box::new(SealedDetails {
                     record,
                     inspection,
