@@ -1010,10 +1010,9 @@ impl RelayApp {
                     ui.add_space(12.0);
                     if record.direction == Direction::Outgoing
                         && record.state == DeliveryState::Ready
+                        && primary(ui, "Copy to drive…", true).clicked()
                     {
-                        if primary(ui, "Copy to drive…", true).clicked() {
-                            self.choose_parcel_export(ui.ctx(), &record.parcel_id);
-                        }
+                        self.choose_parcel_export(ui.ctx(), &record.parcel_id);
                     }
                     if record.direction == Direction::Outgoing
                         && record.state == DeliveryState::WaitingReceipt
