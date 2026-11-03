@@ -795,7 +795,10 @@ impl RelayApp {
                 ));
                 draw_record(ui, &result.record);
                 if result.repaired_shards > 0 {
-                    ui.label(format!("Damaged pieces repaired: {}", result.repaired_shards));
+                    ui.label(format!(
+                        "Damaged pieces repaired: {}",
+                        result.repaired_shards
+                    ));
                 }
                 ui.add_space(16.0);
                 if self.receipt_exported.contains(&result.record.parcel_id) {
@@ -1061,6 +1064,10 @@ impl RelayApp {
         }
         ui.add_space(24.0);
         ui.collapsing("Recovery & local storage", |ui| {
+            ui.label("If a confirmation returned but its handoff is missing, add it here to restore the record.");
+            if ui.button("Add a returned confirmation…").clicked() {
+                self.import_confirmation(ui.ctx());
+            }
             ui.label("If a save was interrupted, verify saved files and restore local records. Changed content is reported, never silently accepted.");
             if ui.button("Verify and recover…").clicked() { self.unlock=Some(Unlock::Recover); }
             if let Some(summary)=&self.recovery {
@@ -1972,20 +1979,22 @@ impl eframe::App for RelayApp {
                     .max_width(content_width)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
-                    // A maximum is an assignment, not a clamp: never widen a
-                    // narrow viewport to the preferred large-window width.
-                    ui.set_max_width(ui.available_width().min(content_width));
-                    self.messages(ui);
-                    ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| match self.screen {
-                        Screen::Home => self.home_screen(ui),
-                        Screen::Send => self.send_screen(ui),
-                        Screen::Receive => self.receive_screen(ui),
-                        Screen::Activity => self.activity_screen(ui),
-                        Screen::People => self.people_screen(ui),
-                        Screen::Demo => self.demo_screen(ui),
+                        // A maximum is an assignment, not a clamp: never widen a
+                        // narrow viewport to the preferred large-window width.
+                        ui.set_max_width(ui.available_width().min(content_width));
+                        self.messages(ui);
+                        ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| {
+                            match self.screen {
+                                Screen::Home => self.home_screen(ui),
+                                Screen::Send => self.send_screen(ui),
+                                Screen::Receive => self.receive_screen(ui),
+                                Screen::Activity => self.activity_screen(ui),
+                                Screen::People => self.people_screen(ui),
+                                Screen::Demo => self.demo_screen(ui),
+                            }
+                        });
+                        ui.add_space(20.0);
                     });
-                    ui.add_space(20.0);
-                });
             });
         self.dialogs(context);
         if self.busy() {
