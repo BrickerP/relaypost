@@ -30,6 +30,15 @@ Intel Macs, Linux ARM, Linux desktop UI and Windows packages are not available.
    open **Help & walkthrough → Start a new walkthrough**; no identity setup or
    password is needed for that sample.
 
+On macOS 15 or later, allow RelayPost's **Local Network** request when macOS
+shows it. If access was denied, review **System Settings → Privacy & Security →
+Local Network**. This preview uses ad-hoc signing: reliable permission tracking
+across rebuilt copies has not been established. Apple
+[TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy)
+recommends Apple-issued code signing and notes problems with multiple installed
+versions. The current preview has one successful same-host two-app round trip;
+cold discovery and clean two-Mac distribution acceptance remain incomplete.
+
 Open RelayPost on both computers on the same local network. Accept the pairing
 request and check the complete safety code on each side. Being saved as a
 recipient does not mean a computer is currently available. In **Send files**,

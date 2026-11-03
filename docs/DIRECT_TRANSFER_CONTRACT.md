@@ -56,7 +56,7 @@ files or sign success. Existing `receive_parcel()` remains the only save path.
 
 ## Discovery and pairing
 
-Use `mdns-sd = { version = "=0.21.7", default-features = false }` with
+Use `mdns-sd = { version = "=0.21.7", default-features = false, features = ["logging"] }` with
 `_relaypost._tcp.local.`. No HTTP or async runtime is added. The instance name
 and service ID are ephemeral. TXT contains only protocol version and service
 ID, never filenames, private keys or a trust assertion. Fetch and verify the
@@ -71,8 +71,14 @@ latest resolved set and verify the same full fingerprint. Service removal,
 expiry and address replacement prevent an older in-flight result from reviving
 a stale candidate. Successful health checks renew both candidate and peer life.
 
-The daemon monitor must surface binding/permission/discovery failures. Explicit
-shutdown waits for daemon/listener completion rather than relying on Drop.
+Synchronous daemon creation and registration errors surface as Unavailable.
+In mdns-sd 0.21.7, a raw UDP send failure is logged but does not propagate to the
+daemon monitor; an Announce event therefore proves only an attempted
+announcement. `Ready` means the local listener and service commands started,
+not that operating-system network access was granted. The UI says it is looking
+for nearby devices; only a resolved, authenticated Card probe creates Nearby.
+Do not infer a permission decision from errno 35/65 or an empty peer list.
+Explicit shutdown waits for daemon/listener completion rather than relying on Drop.
 Upstream references: [API](https://docs.rs/mdns-sd/0.21.7/mdns_sd/),
 [source and changelog](https://github.com/keepsimple1/mdns-sd).
 
@@ -177,3 +183,14 @@ entitlements. Apple explicitly states the multicast entitlement is not
 required on macOS. Local-network denial must remain visible and retryable;
 never bypass privacy settings or require root. See
 [Apple TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy).
+
+For reliable macOS local-network permission acceptance, use an Apple-issued
+code-signing identity and a single installed application. Apple TN3179 explains
+that local-network privacy tracks code signatures and that multiple installed
+versions can produce unexpected System Settings behavior. The ad-hoc QA apps
+and separate executable UUIDs above do not establish that permission behavior
+is correct. A successful same-host round trip proves carrier/core integration;
+it does not replace clean-user, normally authorized, two-physical-Mac testing.
+Do not replace discovery providers merely to hide this signing/test boundary,
+run a parallel permission probe or use Terminal's implicit network allowance as
+GUI permission evidence.
