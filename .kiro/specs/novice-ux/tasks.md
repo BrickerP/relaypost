@@ -1,3 +1,5 @@
+> Historical Kiro input from the first UX iteration. The 2026-11-03 user-feedback revision supersedes its Home/People navigation and file-only primary flow; follow [the current product flow](../../../docs/UX_PRODUCT_FLOW.md). This annotation and the subsequent revision are by Codex.
+
 # RelayPost — Novice UX Redesign: Tasks
 
 Status: Approved 2026-11-03. Kiro owns items marked [K]; Codex integration agent

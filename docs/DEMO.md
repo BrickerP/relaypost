@@ -146,7 +146,7 @@ open -n /absolute/path/to/RelayPost.app --args \
   --home /absolute/path/to/new-synthetic-demo/bob
 ```
 
-Use separate application processes for Alice and Bob. The Activity screen should
+Use separate application processes for Alice and Bob. The Transfers screen should
 show Alice's confirmed outgoing delivery and Bob's saved incoming delivery. For
 a live walkthrough of the earlier states, create fresh profiles in new homes
 and follow the command sequence printed by the script. Unlock only with the

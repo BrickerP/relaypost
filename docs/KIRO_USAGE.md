@@ -39,6 +39,18 @@ events and review changes. The corresponding
 remote checks and actual usability evidence. A generated layout is not proof
 that an independent novice completed a two-device exchange.
 
+## User-feedback and direct-delivery iteration
+
+The subsequent 2026-11-03 user-feedback iteration removes Home, simplifies
+recipient setup and adds local-network direct delivery as the primary workflow.
+That implementation and its transport/security tests are authored by Codex;
+the earlier Kiro inputs are retained as historical evidence rather than
+relabeled as the new flow. The current contracts are
+[product flow](UX_PRODUCT_FLOW.md) and
+[direct delivery](DIRECT_TRANSFER_CONTRACT.md). The original Kiro visual
+foundation and shared walkthrough remain in use with separately attributed
+integration changes.
+
 ## Earlier receive-recovery regression
 
 On 2026-11-02, a real Kiro CLI v2 session reviewed receive recovery and generated

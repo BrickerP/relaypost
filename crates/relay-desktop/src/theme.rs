@@ -4,8 +4,8 @@
 // the bundled Atkinson Hyperlegible Next fonts and sets the egui style to the
 // approved design-system values.
 //
-// Owner: Kiro (novice-ux redesign, 2026-11-03).
-// Compilation and validation are pending GitHub Actions; no local Rust run.
+// Initial foundation: Kiro (novice-ux redesign, 2026-11-03).
+// Integration and subsequent UX refinements: Codex. Rust checks run remotely.
 
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use std::sync::Arc;
@@ -91,8 +91,15 @@ pub fn configure(context: &egui::Context) {
     style.visuals.override_text_color = Some(INK);
     style.visuals.selection.bg_fill = Color32::from_rgb(0xD0, 0xE8, 0xE0);
     style.visuals.selection.stroke = egui::Stroke::new(1.0_f32, TEAL);
+    style.visuals.widgets.inactive.bg_fill = Color32::WHITE;
+    style.visuals.widgets.inactive.weak_bg_fill = Color32::WHITE;
+    style.visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, LINE);
     style.visuals.widgets.active.bg_fill = Color32::from_rgb(0xD0, 0xE8, 0xE0);
+    style.visuals.widgets.active.weak_bg_fill = Color32::from_rgb(0xD0, 0xE8, 0xE0);
+    style.visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, TEAL);
     style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(0xE5, 0xF0, 0xE9);
+    style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(0xE5, 0xF0, 0xE9);
+    style.visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, TEAL);
     style.visuals.panel_fill = PAPER;
     style.visuals.window_fill = Color32::WHITE;
     style.visuals.window_stroke = egui::Stroke::new(1.0_f32, LINE);

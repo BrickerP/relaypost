@@ -24,17 +24,26 @@ Intel Macs, Linux ARM, Linux desktop UI and Windows packages are not available.
    **System Settings → Privacy & Security** after the opening attempt. Managed
    Macs may disallow approval. Do not disable Gatekeeper or remove quarantine
    attributes.
-3. **Home** gives you the next task. For your own files, set up this computer,
-   then use **People** to exchange connection cards and compare every group of
+3. Start on **Send files**. Set up this computer, then use **Add recipient**
+   to find the nearby computer and compare every group of
    the complete safety code on both computers. To try a disposable sample first,
    open **Help & walkthrough → Start a new walkthrough**; no identity setup or
    password is needed for that sample.
 
-Use **Send files** to prepare a protected transfer and copy it to a drive. On the
-other computer, **Receive files** checks the selected transfer automatically and
-saves the verified files. Put the confirmation on the drive and bring it back;
-**Home** lets the sender add it. The sender waits until the expected computer's
-signed confirmation has been verified.
+Open RelayPost on both computers on the same local network. Accept the pairing
+request and check the complete safety code on each side. Being saved as a
+recipient does not mean a computer is currently available. In **Send files**,
+select an available verified recipient and choose **Send directly**. The other
+person accepts the request before the encrypted package is transferred, then
+explicitly unlocks and saves in **Receive files**. A signed confirmation returns
+automatically while both apps are available; **Transfers** shows progress.
+
+For disconnected use, add the other computer using its public identity card
+and choose **Save transfer package**. Move it using a USB drive, shared folder
+or another accessible location, and open it in the recipient's **Receive files**.
+Return its confirmation package and import it in **Transfers**. A package
+addressed to someone else is never incoming for this computer. Both delivery
+methods confirm only after the expected computer's signed save receipt verifies.
 
 The normal desktop workflow requires no command-line tools. Files are saved in
 the app's inbox; the result offers **Show saved files**. There is no online

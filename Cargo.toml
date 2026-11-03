@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/relay-core", "crates/relay-cli", "crates/relay-desktop"]
+members = ["crates/relay-core", "crates/relay-cli", "crates/relay-desktop", "crates/relay-direct"]
 resolver = "2"
 
 [workspace.package]

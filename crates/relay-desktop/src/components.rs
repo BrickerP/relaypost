@@ -5,8 +5,8 @@
 // read or write `RelayApp` state, never call relay-core, and have no side
 // effects beyond painting.
 //
-// Owner: Kiro (novice-ux redesign, 2026-11-03).
-// Compilation and validation are pending GitHub Actions; no local Rust run.
+// Initial primitives: Kiro (novice-ux redesign, 2026-11-03).
+// Integration and subsequent UX refinements: Codex. Rust checks run remotely.
 
 use crate::theme::{DISPLAY_FAMILY, INK, LINE, MUTED, PAPER, TEAL};
 use eframe::egui::{self, Color32, FontFamily, RichText, Stroke, Ui, Vec2};
@@ -111,7 +111,7 @@ pub fn empty_state(ui: &mut Ui, title: &str, body: &str) {
 // ---------------------------------------------------------------------------
 
 /// Labels for the four phases of a RelayPost offline handoff.
-const PHASE_LABELS: [&str; 4] = ["Prepared", "Copied to drive", "Files saved", "Confirmed"];
+const PHASE_LABELS: [&str; 4] = ["Prepared", "Delivery copy", "Files saved", "Confirmed"];
 
 /// Renders the handoff ribbon: four phases connected by horizontal lines.
 ///
@@ -129,8 +129,8 @@ const PHASE_LABELS: [&str; 4] = ["Prepared", "Copied to drive", "Files saved", "
 ///
 /// **Truthfulness contract:**
 /// - No animation, no numeric fake progress.
-/// - Stage 1 ("Copied to drive") does not claim the destination received
-///   anything.
+/// - Stage 1 ("Delivery copy") does not claim the recipient decrypted or saved
+///   the files. The caller explains the actual direct or package handoff.
 /// - Stage 3 ("Confirmed") is only reached when the caller passes `stage = 3`,
 ///   which must be driven by a verified `DeliveryState::Confirmed` fact.
 pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
