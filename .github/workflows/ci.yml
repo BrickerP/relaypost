@@ -47,7 +47,7 @@ jobs:
             exit 0
           fi
           cat ci-logs/dependency-errors.log
-          cargo generate-lockfile 2>&1 | tee ci-logs/lock-generation.log
+          cargo metadata --format-version 1 > ci-logs/proposed-dependency-metadata.json
           git diff --binary -- Cargo.lock > ci-logs/lock.patch
           cp Cargo.lock ci-logs/proposed-Cargo.lock
           exit 1

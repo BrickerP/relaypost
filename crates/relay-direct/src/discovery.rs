@@ -7,7 +7,10 @@ use std::time::Duration;
 pub(crate) const SERVICE_TYPE: &str = "_relaypost._tcp.local.";
 
 pub(crate) enum Event {
-    Resolved { service: String, addresses: Vec<SocketAddrV4> },
+    Resolved {
+        service: String,
+        addresses: Vec<SocketAddrV4>,
+    },
     Removed(String),
     Error(String),
 }
@@ -30,16 +33,31 @@ impl Discovery {
             let monitor = daemon.monitor()?;
             let hostname = format!("relaypost-{instance}.local.");
             let info = ServiceInfo::new(
-                SERVICE_TYPE, instance, &hostname, "", port,
+                SERVICE_TYPE,
+                instance,
+                &hostname,
+                "",
+                port,
                 &[("v", "1"), ("sid", instance)][..],
-            )?.enable_addr_auto();
-            if visible { daemon.register(info.clone())?; }
+            )?
+            .enable_addr_auto();
+            if visible {
+                daemon.register(info.clone())?;
+            }
             Ok((events, monitor, info))
         })();
         match setup {
-            Ok((events, monitor, info)) => Ok(Self { daemon, events, monitor, info, registered: visible }),
+            Ok((events, monitor, info)) => Ok(Self {
+                daemon,
+                events,
+                monitor,
+                info,
+                registered: visible,
+            }),
             Err(error) => {
-                if let Ok(done) = daemon.shutdown() { let _ = done.recv_timeout(Duration::from_secs(1)); }
+                if let Ok(done) = daemon.shutdown() {
+                    let _ = done.recv_timeout(Duration::from_secs(1));
+                }
                 Err(error)
             }
         }
@@ -47,8 +65,11 @@ impl Discovery {
 
     pub fn visible(&mut self, visible: bool) -> Result<()> {
         if visible != self.registered {
-            if visible { self.daemon.register(self.info.clone())?; }
-            else { self.daemon.unregister(self.info.get_fullname())?; }
+            if visible {
+                self.daemon.register(self.info.clone())?;
+            } else {
+                self.daemon.unregister(self.info.get_fullname())?;
+            }
             self.registered = visible;
         }
         Ok(())
@@ -70,20 +91,30 @@ impl Discovery {
     pub fn drain(&self) -> Vec<Event> {
         let mut output = Vec::new();
         for event in self.monitor.try_iter().take(32) {
-            if let DaemonEvent::Error(error) = event { output.push(Event::Error(error.to_string())); }
+            if let DaemonEvent::Error(error) = event {
+                output.push(Event::Error(error.to_string()));
+            }
         }
         for event in self.events.try_iter().take(64) {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
-                    if info.get_property_val_str("v") != Some("1") { continue; }
-                    let mut addresses: Vec<_> = info.get_addresses_v4().into_iter()
+                    if info.get_property_val_str("v") != Some("1") {
+                        continue;
+                    }
+                    let mut addresses: Vec<_> = info
+                        .get_addresses_v4()
+                        .into_iter()
                         .filter(|ip| wire::is_local(*ip))
-                        .map(|ip| SocketAddrV4::new(ip, info.get_port())).collect();
+                        .map(|ip| SocketAddrV4::new(ip, info.get_port()))
+                        .collect();
                     addresses.sort();
                     addresses.dedup();
                     addresses.truncate(8);
                     if !addresses.is_empty() {
-                        output.push(Event::Resolved { service: info.get_fullname().to_owned(), addresses });
+                        output.push(Event::Resolved {
+                            service: info.get_fullname().to_owned(),
+                            addresses,
+                        });
                     }
                 }
                 ServiceEvent::ServiceRemoved(_, name) => output.push(Event::Removed(name)),
@@ -94,7 +125,9 @@ impl Discovery {
     }
 
     pub fn stop(&mut self) {
-        if self.registered { let _ = self.daemon.unregister(self.info.get_fullname()); }
+        if self.registered {
+            let _ = self.daemon.unregister(self.info.get_fullname());
+        }
         let _ = self.daemon.stop_browse(SERVICE_TYPE);
         if let Ok(done) = self.daemon.shutdown() {
             let _ = done.recv_timeout(Duration::from_millis(500));
@@ -103,15 +136,27 @@ impl Discovery {
     }
 }
 
-impl Drop for Discovery { fn drop(&mut self) { self.stop(); } }
+impl Drop for Discovery {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn service_record_exposes_no_identity_or_file_metadata() {
-        let record = ServiceInfo::new(SERVICE_TYPE, "session-123", "session-123.local.", "", 4567,
-            &[("v", "1"), ("sid", "session-123")][..]).unwrap().enable_addr_auto();
+        let record = ServiceInfo::new(
+            SERVICE_TYPE,
+            "session-123",
+            "session-123.local.",
+            "",
+            4567,
+            &[("v", "1"), ("sid", "session-123")][..],
+        )
+        .unwrap()
+        .enable_addr_auto();
         assert_eq!(record.get_property_val_str("v"), Some("1"));
         for private in ["name", "fingerprint", "files", "password"] {
             assert!(record.get_property_val_str(private).is_none());

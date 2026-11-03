@@ -435,7 +435,10 @@ impl Profile {
         signature: String,
         connection: &Connection,
     ) -> Result<ParcelRecord> {
-        ensure!(raw.len() as u64 <= MAX_ENVELOPE && signature.len() <= 2048, "receipt exceeds resource bound");
+        ensure!(
+            raw.len() as u64 <= MAX_ENVELOPE && signature.len() <= 2048,
+            "receipt exceeds resource bound"
+        );
         let claimed: Receipt = fsutil::json(&raw)?;
         fsutil::check_id(&claimed.parcel_id)?;
         let destination = self.home.join("acknowledgments").join(&claimed.parcel_id);

@@ -21,11 +21,18 @@ pub enum ServiceState {
     DormantNoIdentity,
     Starting,
     Ready,
-    Unavailable { kind: UnavailableKind, message: String },
+    Unavailable {
+        kind: UnavailableKind,
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug)]
-pub enum UnavailableKind { Listener, Discovery, LocalNetwork }
+pub enum UnavailableKind {
+    Listener,
+    Discovery,
+    LocalNetwork,
+}
 
 #[derive(Clone, Debug)]
 pub struct NearbyPeer {
@@ -59,10 +66,19 @@ pub enum PairingAttemptState {
 #[derive(Clone, Debug)]
 pub enum IncomingOfferState {
     AwaitingDecision,
-    Receiving { received: u64, total: u64 },
-    ReadyToSave { parcel_path: PathBuf, inspection: Inspection },
+    Receiving {
+        received: u64,
+        total: u64,
+    },
+    ReadyToSave {
+        parcel_path: PathBuf,
+        inspection: Inspection,
+    },
     Declined,
-    Failed { message: String, retryable: bool },
+    Failed {
+        message: String,
+        retryable: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -121,7 +137,11 @@ pub enum DirectCommand {
 }
 
 #[derive(Clone, Debug)]
-pub enum DirectCommandError { QueueFull, Stopped, ShutdownTimeout }
+pub enum DirectCommandError {
+    QueueFull,
+    Stopped,
+    ShutdownTimeout,
+}
 
 impl std::fmt::Display for DirectCommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

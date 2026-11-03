@@ -119,7 +119,8 @@ impl RelayApp {
     pub fn new(context: &eframe::CreationContext<'_>, profile: Profile, home: PathBuf) -> Self {
         crate::theme::configure(&context.egui_ctx);
         let repaint = context.egui_ctx.clone();
-        let direct = DirectHandle::spawn(profile.clone(), Arc::new(move || repaint.request_repaint()));
+        let direct =
+            DirectHandle::spawn(profile.clone(), Arc::new(move || repaint.request_repaint()));
         let direct_state = direct.snapshot();
         let direct_revision = direct_state.profile_revision;
         let mut app = Self {
@@ -206,7 +207,11 @@ impl RelayApp {
             let _ = sender.send(result);
             context.request_repaint();
         });
-        self.pending = Some(Pending { label, receiver, keep_feedback: false });
+        self.pending = Some(Pending {
+            label,
+            receiver,
+            keep_feedback: false,
+        });
     }
 
     fn poll(&mut self, context: &egui::Context) {
@@ -216,7 +221,10 @@ impl RelayApp {
             Err(TryRecvError::Disconnected) => Some(Err("The background operation stopped unexpectedly. Refresh local records before trying again.".to_owned())),
         });
         let Some(result) = result else { return };
-        let keep_feedback = self.pending.as_ref().is_some_and(|pending| pending.keep_feedback);
+        let keep_feedback = self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.keep_feedback);
         self.pending = None;
         match result {
             Err(error) => {
@@ -224,7 +232,9 @@ impl RelayApp {
                 self.error = Some(error);
             }
             Ok(completed) => {
-                if !keep_feedback { self.notice = completed.notice; }
+                if !keep_feedback {
+                    self.notice = completed.notice;
+                }
                 if let Some(snapshot) = completed.snapshot {
                     match snapshot.identity {
                         Ok(identity) => {
@@ -321,14 +331,22 @@ impl RelayApp {
                                 match intent {
                                     SendIntent::Direct { peer, recipient } => {
                                         let latest = self.direct.snapshot();
-                                        let available = matches!(latest.service, ServiceState::Ready) && latest.peers.iter().any(|nearby| nearby.id == peer && nearby.card.fingerprint == recipient && nearby.locally_verified);
+                                        let available =
+                                            matches!(latest.service, ServiceState::Ready)
+                                                && latest.peers.iter().any(|nearby| {
+                                                    nearby.id == peer
+                                                        && nearby.card.fingerprint == recipient
+                                                        && nearby.locally_verified
+                                                });
                                         if available {
                                             self.start_direct_send(peer, id);
                                         } else {
                                             self.error = Some("The selected recipient is no longer available on the local network. Your protected files are ready; choose how to deliver this same transfer below.".to_owned());
                                         }
                                     }
-                                    SendIntent::Package { .. } => self.choose_parcel_export(context, &id),
+                                    SendIntent::Package { .. } => {
+                                        self.choose_parcel_export(context, &id)
+                                    }
                                 }
                             }
                         }
@@ -364,28 +382,52 @@ impl RelayApp {
     }
 
     fn start_direct_send(&mut self, peer: PeerId, parcel_id: String) {
-        if self.direct_command(DirectCommand::Send { peer, parcel_id: parcel_id.clone() }) {
+        if self.direct_command(DirectCommand::Send {
+            peer,
+            parcel_id: parcel_id.clone(),
+        }) {
             self.queued_sends.insert(parcel_id);
         }
     }
 
     fn sync_direct(&mut self, context: &egui::Context) {
         self.direct_state = self.direct.snapshot();
-        self.queued_sends.retain(|id| !self.direct_state.outgoing.iter().any(|transfer| &transfer.parcel_id == id));
-        if matches!(self.direct_state.service, ServiceState::Unavailable { .. }) { self.queued_sends.clear(); }
-        if self.direct_state.profile_revision != self.direct_revision && !self.busy() && !self.modal_open() {
+        self.queued_sends.retain(|id| {
+            !self
+                .direct_state
+                .outgoing
+                .iter()
+                .any(|transfer| &transfer.parcel_id == id)
+        });
+        if matches!(self.direct_state.service, ServiceState::Unavailable { .. }) {
+            self.queued_sends.clear();
+        }
+        if self.direct_state.profile_revision != self.direct_revision
+            && !self.busy()
+            && !self.modal_open()
+        {
             self.direct_revision = self.direct_state.profile_revision;
             let notice = std::mem::take(&mut self.notice);
             let error = self.error.take();
             self.start(context, Action::Refresh);
-            if let Some(pending) = &mut self.pending { pending.keep_feedback = true; }
+            if let Some(pending) = &mut self.pending {
+                pending.keep_feedback = true;
+            }
             self.notice = notice;
             self.error = error;
         }
-        if self.busy() || self.modal_open() { return; }
-        let Some(task) = &mut self.pairing_task else { return };
+        if self.busy() || self.modal_open() {
+            return;
+        }
+        let Some(task) = &mut self.pairing_task else {
+            return;
+        };
         if task.waiting_for_peer {
-            let attempt = self.direct_state.pairing_attempts.iter().find(|attempt| attempt.card.fingerprint == task.fingerprint);
+            let attempt = self
+                .direct_state
+                .pairing_attempts
+                .iter()
+                .find(|attempt| attempt.card.fingerprint == task.fingerprint);
             match attempt.map(|attempt| &attempt.state) {
                 Some(PairingAttemptState::PeerAccepted) => task.waiting_for_peer = false,
                 Some(PairingAttemptState::Declined | PairingAttemptState::Failed { .. }) => {
@@ -395,7 +437,11 @@ impl RelayApp {
                 _ => return,
             }
         }
-        let contact = self.contacts.iter().find(|contact| contact.card.fingerprint == task.fingerprint).cloned();
+        let contact = self
+            .contacts
+            .iter()
+            .find(|contact| contact.card.fingerprint == task.fingerprint)
+            .cloned();
         if let Some(contact) = contact {
             self.pairing_task = None;
             if contact.verified {
@@ -472,19 +518,26 @@ impl RelayApp {
                     ui.add_space(5.0);
                 }
                 ui.add_space((ui.available_height() - 158.0).max(24.0));
-                let computer_name = self.identity.as_ref().map(|card| card.name.as_str()).unwrap_or("Set up this computer");
-                if ui.add_enabled(
-                    !self.busy() && !self.modal_open(),
-                    egui::Button::new(
-                        RichText::new(format!("This computer\n{computer_name}"))
-                            .font(display_font(14.0))
-                            .color(Color32::WHITE),
+                let computer_name = self
+                    .identity
+                    .as_ref()
+                    .map(|card| card.name.as_str())
+                    .unwrap_or("Set up this computer");
+                if ui
+                    .add_enabled(
+                        !self.busy() && !self.modal_open(),
+                        egui::Button::new(
+                            RichText::new(format!("This computer\n{computer_name}"))
+                                .font(display_font(14.0))
+                                .color(Color32::WHITE),
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .frame(false)
+                        .wrap()
+                        .min_size(egui::vec2(ui.available_width(), 52.0)),
                     )
-                    .fill(Color32::TRANSPARENT)
-                    .frame(false)
-                    .wrap()
-                    .min_size(egui::vec2(ui.available_width(), 52.0)),
-                ).clicked() {
+                    .clicked()
+                {
                     self.open_computer();
                 }
                 ui.add_space(16.0);
@@ -679,7 +732,9 @@ impl RelayApp {
             .collect();
         if trusted.is_empty() {
             surface(ui, |ui| {
-                ui.label(RichText::new("Who should be able to open the files?").font(display_font(22.0)));
+                ui.label(
+                    RichText::new("Who should be able to open the files?").font(display_font(22.0)),
+                );
                 ui.label("Find the recipient's nearby computer, then check its complete safety code. You can also add it using an identity card while offline.");
                 ui.add_space(16.0);
                 if primary(ui, "Add recipient", true).clicked() {
@@ -778,8 +833,18 @@ impl RelayApp {
                         .small()
                         .color(GREEN),
                 );
-                let nearby = self.direct_state.peers.iter().any(|peer| peer.card.fingerprint == contact.card.fingerprint && peer.locally_verified);
-                ui.label(RichText::new(if nearby { "Nearby on the local network" } else { "Not currently found on the local network" }).small().color(MUTED));
+                let nearby = self.direct_state.peers.iter().any(|peer| {
+                    peer.card.fingerprint == contact.card.fingerprint && peer.locally_verified
+                });
+                ui.label(
+                    RichText::new(if nearby {
+                        "Nearby on the local network"
+                    } else {
+                        "Not currently found on the local network"
+                    })
+                    .small()
+                    .color(MUTED),
+                );
                 ui.collapsing("Recipient details", |ui| {
                     fingerprint(ui, &contact.card.fingerprint);
                 });
@@ -878,18 +943,32 @@ impl RelayApp {
                 self.contact_name(&self.recipient)
             ));
         }
-        let peer = self.direct_state.peers.iter().find(|peer| peer.card.fingerprint == self.recipient && peer.locally_verified).cloned();
-        let direct_available = peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
+        let peer = self
+            .direct_state
+            .peers
+            .iter()
+            .find(|peer| peer.card.fingerprint == self.recipient && peer.locally_verified)
+            .cloned();
+        let direct_available =
+            peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
         if primary(ui, "Send directly", valid && direct_available).clicked() {
             if let Some(peer) = peer {
-                self.unlock = Some(Unlock::Send(SendIntent::Direct { peer: peer.id, recipient: self.recipient.clone() }));
+                self.unlock = Some(Unlock::Send(SendIntent::Direct {
+                    peer: peer.id,
+                    recipient: self.recipient.clone(),
+                }));
             }
         }
         if !direct_available && !self.recipient.is_empty() {
             ui.label("The recipient is not available on the local network. Keep both apps open on the same network, or save a package for offline delivery.");
         }
-        if ui.add_enabled(valid, egui::Button::new("Save transfer package…")).clicked() {
-            self.unlock = Some(Unlock::Send(SendIntent::Package { recipient: self.recipient.clone() }));
+        if ui
+            .add_enabled(valid, egui::Button::new("Save transfer package…"))
+            .clicked()
+        {
+            self.unlock = Some(Unlock::Send(SendIntent::Package {
+                recipient: self.recipient.clone(),
+            }));
         }
     }
 
@@ -915,7 +994,9 @@ impl RelayApp {
         if self.identity.is_none() {
             surface(ui, |ui| {
                 ui.label(RichText::new("Set up this computer first").font(display_font(22.0)));
-                ui.label("Give this computer a name and password so the sender can add and verify it.");
+                ui.label(
+                    "Give this computer a name and password so the sender can add and verify it.",
+                );
                 if primary(ui, "Set up this computer", true).clicked() {
                     self.open_computer();
                 }
@@ -976,7 +1057,13 @@ impl RelayApp {
                 if self.receipt_exported.contains(&result.record.parcel_id) {
                     ui.label(format!("A confirmation package was saved. Give it to {name} if you are completing this transfer offline."));
                 }
-                if ui.add_enabled(result.record.receipt_path.is_some(), egui::Button::new("Save confirmation package…")).clicked() {
+                if ui
+                    .add_enabled(
+                        result.record.receipt_path.is_some(),
+                        egui::Button::new("Save confirmation package…"),
+                    )
+                    .clicked()
+                {
                     self.choose_receipt_export(ui.ctx(), &result.record.parcel_id);
                 }
                 if ui.button("Receive another transfer").clicked() {
@@ -1052,8 +1139,16 @@ impl RelayApp {
             ui.label(RichText::new("Have an encrypted package?").font(display_font(21.0)));
             ui.label("Open the package folder someone gave you. It can be on a USB drive or any folder you can access.");
             ui.add_space(12.0);
-            if ui.button("Open encrypted package…").clicked() { self.choose_receive(ui.ctx()); }
-            ui.label(RichText::new("You can also drop one package folder or its containing folder here.").small().color(MUTED));
+            if ui.button("Open encrypted package…").clicked() {
+                self.choose_receive(ui.ctx());
+            }
+            ui.label(
+                RichText::new(
+                    "You can also drop one package folder or its containing folder here.",
+                )
+                .small()
+                .color(MUTED),
+            );
         });
         if self.transfer_candidates.len() > 1 {
             ui.add_space(20.0);
@@ -1258,19 +1353,30 @@ impl RelayApp {
     }
 
     fn recipients_screen(&mut self, ui: &mut Ui) {
-        page_title(ui, "Recipients", "Computers whose public identity you have added here.");
+        page_title(
+            ui,
+            "Recipients",
+            "Computers whose public identity you have added here.",
+        );
         if let Some(step) = self.recipient_step {
             surface(ui, |ui| {
                 if !matches!(step, RecipientStep::Nearby) {
                     ui.label(RichText::new("Add using identity card").font(display_font(20.0)));
-                    ui.label(RichText::new("Use this method to add a computer while offline.").small().color(MUTED));
+                    ui.label(
+                        RichText::new("Use this method to add a computer while offline.")
+                            .small()
+                            .color(MUTED),
+                    );
                     ui.add_space(16.0);
                 }
                 match step {
                     RecipientStep::Nearby => self.nearby_recipients(ui),
                     RecipientStep::ShareCard => {
                         section_label(ui, "IDENTITY CARD · 1 OF 3");
-                        ui.label(RichText::new("Share this computer's identity card").font(display_font(24.0)));
+                        ui.label(
+                            RichText::new("Share this computer's identity card")
+                                .font(display_font(24.0)),
+                        );
                         ui.label("Both computers need RelayPost. An identity card is a small public file containing no password or documents. Sharing it does not create a live connection or send files.");
                         ui.add_space(12.0);
                         ui.label("Save your card, give it to the other person, and ask them to add it in Recipients. They must also check this computer's complete safety code.");
@@ -1281,7 +1387,10 @@ impl RelayApp {
                     }
                     RecipientStep::OpenCard => {
                         section_label(ui, "IDENTITY CARD · 2 OF 3");
-                        ui.label(RichText::new("Open their computer's identity card").font(display_font(24.0)));
+                        ui.label(
+                            RichText::new("Open their computer's identity card")
+                                .font(display_font(24.0)),
+                        );
                         ui.label("Give them the card you saved. Ask them to save their own card from This computer in RelayPost and share that file with you.");
                         ui.add_space(12.0);
                         ui.label("Open their card here. You will check its complete safety code before this computer can prepare files for them.");
@@ -1306,7 +1415,14 @@ impl RelayApp {
         if primary(ui, "Add recipient", true).clicked() {
             self.add_recipient_for(Screen::Recipients);
         }
-        if !self.direct_state.incoming_pairings.is_empty() && ui.button(format!("Review device requests ({})", self.direct_state.incoming_pairings.len())).clicked() {
+        if !self.direct_state.incoming_pairings.is_empty()
+            && ui
+                .button(format!(
+                    "Review device requests ({})",
+                    self.direct_state.incoming_pairings.len()
+                ))
+                .clicked()
+        {
             self.add_recipient_for(Screen::Recipients);
         }
         ui.add_space(20.0);
@@ -1320,8 +1436,16 @@ impl RelayApp {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(&contact.card.name).font(display_font(19.0)));
                         ui.label(
-                            RichText::new(if contact.verified { "Safety code checked here" } else { "Safety code needs checking" })
-                                .color(if contact.verified { GREEN } else { AMBER }),
+                            RichText::new(if contact.verified {
+                                "Safety code checked here"
+                            } else {
+                                "Safety code needs checking"
+                            })
+                            .color(if contact.verified {
+                                GREEN
+                            } else {
+                                AMBER
+                            }),
                         );
                         if ui.button("Details").clicked() {
                             self.recipient_details = Some(contact.clone());
@@ -1344,10 +1468,15 @@ impl RelayApp {
         ui.add_space(16.0);
         self.network_status(ui);
         let mut visible = self.direct_state.visible;
-        if ui.checkbox(&mut visible, "Let nearby devices discover this computer").changed() {
+        if ui
+            .checkbox(&mut visible, "Let nearby devices discover this computer")
+            .changed()
+        {
             self.direct_command(DirectCommand::SetVisible(visible));
         }
-        if ui.button("Look again").clicked() { self.direct_command(DirectCommand::RefreshDiscovery); }
+        if ui.button("Look again").clicked() {
+            self.direct_command(DirectCommand::RefreshDiscovery);
+        }
         for request in self.direct_state.incoming_pairings.clone() {
             let scope = egui::Id::new(("incoming_pairing", &request.id));
             ui.push_id(scope, |ui| {
@@ -1394,12 +1523,29 @@ impl RelayApp {
             ui.push_id(&peer.id, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(&peer.card.name).font(display_font(19.0)));
-                    ui.label(if peer.locally_verified { "Safety code checked here" } else { "Safety code not checked here" });
+                    ui.label(if peer.locally_verified {
+                        "Safety code checked here"
+                    } else {
+                        "Safety code not checked here"
+                    });
                     if peer.locally_verified {
-                        if ui.button("Select device").clicked() { self.finish_adding_recipient(peer.card.fingerprint.clone()); }
-                    } else if ui.add_enabled(self.pairing_task.is_none(), egui::Button::new("Add device…")).clicked()
-                        && self.direct_command(DirectCommand::RequestPairing { peer: peer.id.clone() }) {
-                        self.pairing_task = Some(PairingTask { fingerprint: peer.card.fingerprint.clone(), waiting_for_peer: true });
+                        if ui.button("Select device").clicked() {
+                            self.finish_adding_recipient(peer.card.fingerprint.clone());
+                        }
+                    } else if ui
+                        .add_enabled(
+                            self.pairing_task.is_none(),
+                            egui::Button::new("Add device…"),
+                        )
+                        .clicked()
+                        && self.direct_command(DirectCommand::RequestPairing {
+                            peer: peer.id.clone(),
+                        })
+                    {
+                        self.pairing_task = Some(PairingTask {
+                            fingerprint: peer.card.fingerprint.clone(),
+                            waiting_for_peer: true,
+                        });
                     }
                 });
             });
@@ -1413,13 +1559,28 @@ impl RelayApp {
 
     fn network_status(&mut self, ui: &mut Ui) {
         match self.direct_state.service.clone() {
-            ServiceState::DormantNoIdentity => { ui.label("Set up this computer to use the local network."); }
-            ServiceState::Starting => { ui.spinner(); ui.label("Starting local network discovery…"); }
-            ServiceState::Ready => { ui.label(RichText::new("Local network available").small().color(GREEN)); }
+            ServiceState::DormantNoIdentity => {
+                ui.label("Set up this computer to use the local network.");
+            }
+            ServiceState::Starting => {
+                ui.spinner();
+                ui.label("Starting local network discovery…");
+            }
+            ServiceState::Ready => {
+                ui.label(
+                    RichText::new("Local network available")
+                        .small()
+                        .color(GREEN),
+                );
+            }
             ServiceState::Unavailable { message, .. } => {
                 ui.label(RichText::new("Local network discovery is unavailable. Identity cards and encrypted file packages still work offline.").color(AMBER));
-                ui.collapsing("Network details", |ui| { ui.label(message); });
-                if ui.button("Try local network again").clicked() { self.direct_command(DirectCommand::ReloadProfile); }
+                ui.collapsing("Network details", |ui| {
+                    ui.label(message);
+                });
+                if ui.button("Try local network again").clicked() {
+                    self.direct_command(DirectCommand::ReloadProfile);
+                }
             }
         }
     }
@@ -1428,14 +1589,24 @@ impl RelayApp {
         if self.screen != Screen::Recipients && !self.direct_state.incoming_pairings.is_empty() {
             ui.horizontal_wrapped(|ui| {
                 ui.label("A nearby device wants to exchange identity cards.");
-                if ui.button("Review request").clicked() { self.add_recipient_for(self.screen); }
+                if ui.button("Review request").clicked() {
+                    self.add_recipient_for(self.screen);
+                }
             });
             ui.add_space(16.0);
         }
-        if self.screen != Screen::Receive && self.direct_state.incoming.iter().any(|offer| matches!(offer.state, IncomingOfferState::AwaitingDecision)) {
+        if self.screen != Screen::Receive
+            && self
+                .direct_state
+                .incoming
+                .iter()
+                .any(|offer| matches!(offer.state, IncomingOfferState::AwaitingDecision))
+        {
             ui.horizontal_wrapped(|ui| {
                 ui.label("A device wants to send files to this computer.");
-                if ui.button("Review transfer").clicked() { self.switch_screen(Screen::Receive); }
+                if ui.button("Review transfer").clicked() {
+                    self.switch_screen(Screen::Receive);
+                }
             });
             ui.add_space(16.0);
         }
@@ -1455,7 +1626,9 @@ impl RelayApp {
                 ui.ctx().copy_text(card.fingerprint.clone());
                 self.notice = "Your complete safety code was copied. Share it through a separate channel you already trust.".to_owned();
             }
-            ui.collapsing("Show my complete safety code", |ui| fingerprint(ui, &card.fingerprint));
+            ui.collapsing("Show my complete safety code", |ui| {
+                fingerprint(ui, &card.fingerprint)
+            });
             ui.add_space(16.0);
             ui.collapsing("Advanced", |ui| {
                 value(ui, "Encryption public key", &card.age_recipient);
@@ -1466,29 +1639,54 @@ impl RelayApp {
             return;
         }
         if !self.identity_missing {
-            ui.label(RichText::new("This computer needs attention").font(display_font(22.0)).color(RED));
+            ui.label(
+                RichText::new("This computer needs attention")
+                    .font(display_font(22.0))
+                    .color(RED),
+            );
             ui.label("RelayPost could not read its existing setup. Restore an intact profile backup before using this identity again.");
             if let Some(error) = &self.identity_error {
-                ui.collapsing("Technical details", |ui| { ui.label(error); });
+                ui.collapsing("Technical details", |ui| {
+                    ui.label(error);
+                });
             }
-            if ui.button("Try reading it again").clicked() { self.start(ui.ctx(), Action::Refresh); }
+            if ui.button("Try reading it again").clicked() {
+                self.start(ui.ctx(), Action::Refresh);
+            }
             return;
         }
         ui.label(RichText::new("Give this computer a name").font(display_font(24.0)));
         ui.label("The other person will see this name. Your password protects the private identity kept here.");
         ui.add_space(16.0);
         ui.label("Computer name");
-        ui.add(TextEdit::singleline(&mut self.identity_name).hint_text("e.g. Morgan's Mac").desired_width(ui.available_width()));
+        ui.add(
+            TextEdit::singleline(&mut self.identity_name)
+                .hint_text("e.g. Morgan's Mac")
+                .desired_width(ui.available_width()),
+        );
         password_field(ui, &mut self.password);
         ui.label("Confirm password");
-        ui.add(TextEdit::singleline(&mut *self.confirmation).password(true).desired_width(ui.available_width()));
-        ui.label(RichText::new("There is no online account or password reset.").small().color(MUTED));
+        ui.add(
+            TextEdit::singleline(&mut *self.confirmation)
+                .password(true)
+                .desired_width(ui.available_width()),
+        );
+        ui.label(
+            RichText::new("There is no online account or password reset.")
+                .small()
+                .color(MUTED),
+        );
         ui.add_space(16.0);
-        let valid = !self.identity_name.trim().is_empty() && !self.password.is_empty() && *self.password == *self.confirmation;
+        let valid = !self.identity_name.trim().is_empty()
+            && !self.password.is_empty()
+            && *self.password == *self.confirmation;
         if primary(ui, "Set up this computer", valid).clicked() {
             let password = self.take_password();
             self.confirmation.zeroize();
-            self.start(ui.ctx(), Action::Initialize(self.identity_name.trim().to_owned(), password));
+            self.start(
+                ui.ctx(),
+                Action::Initialize(self.identity_name.trim().to_owned(), password),
+            );
         }
         if !self.confirmation.is_empty() && *self.password != *self.confirmation {
             ui.label(RichText::new("Passwords do not match yet.").color(AMBER));
@@ -1497,10 +1695,15 @@ impl RelayApp {
 
     fn outgoing_delivery(&mut self, ui: &mut Ui, record: &ParcelRecord) {
         if record.state == DeliveryState::Confirmed {
-            ui.label("The recipient's signed confirmation was verified. This transfer is complete.");
+            ui.label(
+                "The recipient's signed confirmation was verified. This transfer is complete.",
+            );
             return;
         }
-        if record.state == DeliveryState::Cancelled || record.state == DeliveryState::Failed || record.local_error.is_some() {
+        if record.state == DeliveryState::Cancelled
+            || record.state == DeliveryState::Failed
+            || record.local_error.is_some()
+        {
             return;
         }
         if self.queued_sends.contains(&record.parcel_id) {
@@ -1508,16 +1711,26 @@ impl RelayApp {
             ui.label("Direct send requested. Waiting for the local network service…");
             return;
         }
-        let transfer = self.direct_state.outgoing.iter().find(|transfer| transfer.parcel_id == record.parcel_id && transfer.recipient == record.recipient).cloned();
+        let transfer = self
+            .direct_state
+            .outgoing
+            .iter()
+            .find(|transfer| {
+                transfer.parcel_id == record.parcel_id && transfer.recipient == record.recipient
+            })
+            .cloned();
         let mut in_progress = false;
         let mut retry_offered = false;
         if let Some(transfer) = transfer {
             match transfer.state {
                 OutgoingTransferState::Offering => {
-                    ui.spinner(); ui.label("Offering the transfer to the recipient…"); in_progress = true;
+                    ui.spinner();
+                    ui.label("Offering the transfer to the recipient…");
+                    in_progress = true;
                 }
                 OutgoingTransferState::WaitingForRecipient => {
-                    ui.label("Waiting for the other person to accept in Receive. File data has not been sent yet."); in_progress = true;
+                    ui.label("Waiting for the other person to accept in Receive. File data has not been sent yet.");
+                    in_progress = true;
                 }
                 OutgoingTransferState::Sending { sent, total } => {
                     ui.label("Sending encrypted files on the local network…");
@@ -1525,19 +1738,34 @@ impl RelayApp {
                     in_progress = true;
                 }
                 OutgoingTransferState::WaitingForSave => {
-                    ui.label("The encrypted copy arrived. The other person still needs to unlock and save it. Confirmation will return automatically while both apps are open."); in_progress = true;
+                    ui.label("The encrypted copy arrived. The other person still needs to unlock and save it. Confirmation will return automatically while both apps are open.");
+                    in_progress = true;
                 }
                 OutgoingTransferState::Confirmed => {
-                    ui.label("The recipient's signed confirmation was verified. Updating local records…"); in_progress = true;
+                    ui.label(
+                        "The recipient's signed confirmation was verified. Updating local records…",
+                    );
+                    in_progress = true;
                 }
-                OutgoingTransferState::Declined => { ui.label("The recipient declined this transfer."); }
+                OutgoingTransferState::Declined => {
+                    ui.label("The recipient declined this transfer.");
+                }
                 OutgoingTransferState::Failed { message, retryable } => {
-                    ui.label(RichText::new("The local network transfer stopped. Delivery is not confirmed.").color(AMBER));
-                    ui.collapsing("Transfer details", |ui| { ui.label(message); });
+                    ui.label(
+                        RichText::new(
+                            "The local network transfer stopped. Delivery is not confirmed.",
+                        )
+                        .color(AMBER),
+                    );
+                    ui.collapsing("Transfer details", |ui| {
+                        ui.label(message);
+                    });
                     if retryable {
                         retry_offered = true;
                         if primary(ui, "Retry direct transfer", true).clicked() {
-                            if self.direct_command(DirectCommand::Retry { parcel_id: record.parcel_id.clone() }) {
+                            if self.direct_command(DirectCommand::Retry {
+                                parcel_id: record.parcel_id.clone(),
+                            }) {
                                 self.queued_sends.insert(record.parcel_id.clone());
                             }
                         }
@@ -1545,10 +1773,18 @@ impl RelayApp {
                 }
             }
         }
-        if in_progress { return; }
+        if in_progress {
+            return;
+        }
         if record.state == DeliveryState::Ready && !retry_offered {
-            let peer = self.direct_state.peers.iter().find(|peer| peer.card.fingerprint == record.recipient && peer.locally_verified).cloned();
-            let available = peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
+            let peer = self
+                .direct_state
+                .peers
+                .iter()
+                .find(|peer| peer.card.fingerprint == record.recipient && peer.locally_verified)
+                .cloned();
+            let available =
+                peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
             if primary(ui, "Send directly", available).clicked() {
                 if let Some(peer) = peer {
                     self.start_direct_send(peer.id, record.parcel_id.clone());
@@ -1556,26 +1792,54 @@ impl RelayApp {
             }
             if !available {
                 ui.label("The recipient is not available on the local network. Keep both apps open on the same network, or use an encrypted package.");
-                if ui.button("Look again").clicked() { self.direct_command(DirectCommand::RefreshDiscovery); }
+                if ui.button("Look again").clicked() {
+                    self.direct_command(DirectCommand::RefreshDiscovery);
+                }
             }
         }
-        if let Some((_, path)) = self.last_export.as_ref().filter(|(id, _)| id == &record.parcel_id) {
-            value(ui, "Encrypted package saved to", &path.display().to_string());
+        if let Some((_, path)) = self
+            .last_export
+            .as_ref()
+            .filter(|(id, _)| id == &record.parcel_id)
+        {
+            value(
+                ui,
+                "Encrypted package saved to",
+                &path.display().to_string(),
+            );
             ui.label(format!("Give {} this entire folder using a USB drive, shared folder, or another file-moving method. They must open it in Receive. Saving it here does not send it or confirm delivery.", self.other_name(record)));
         } else if record.state == DeliveryState::WaitingReceipt {
             ui.label("Waiting for the recipient's signed save confirmation. RelayPost can retrieve it automatically when both apps are open and the recipient is found on the local network.");
         }
-        if ui.button("Save encrypted package…").clicked() { self.choose_parcel_export(ui.ctx(), &record.parcel_id); }
-        if record.state == DeliveryState::WaitingReceipt && ui.button("Add returned confirmation…").clicked() {
+        if ui.button("Save encrypted package…").clicked() {
+            self.choose_parcel_export(ui.ctx(), &record.parcel_id);
+        }
+        if record.state == DeliveryState::WaitingReceipt
+            && ui.button("Add returned confirmation…").clicked()
+        {
             self.import_confirmation(ui.ctx());
         }
     }
 
     fn incoming_transfers(&mut self, ui: &mut Ui) -> bool {
-        let offers: Vec<_> = self.direct_state.incoming.iter().filter(|offer| {
-            !matches!(offer.state, IncomingOfferState::ReadyToSave { .. }) || !self.deliveries.iter().any(|record| record.direction == Direction::Incoming && record.parcel_id == offer.parcel_id && record.state == DeliveryState::SavedReceiptReady && record.local_error.is_none())
-        }).cloned().collect();
-        if offers.is_empty() { return false; }
+        let offers: Vec<_> = self
+            .direct_state
+            .incoming
+            .iter()
+            .filter(|offer| {
+                !matches!(offer.state, IncomingOfferState::ReadyToSave { .. })
+                    || !self.deliveries.iter().any(|record| {
+                        record.direction == Direction::Incoming
+                            && record.parcel_id == offer.parcel_id
+                            && record.state == DeliveryState::SavedReceiptReady
+                            && record.local_error.is_none()
+                    })
+            })
+            .cloned()
+            .collect();
+        if offers.is_empty() {
+            return false;
+        }
         section_label(ui, "LOCAL NETWORK");
         for offer in offers {
             let scope = egui::Id::new(("incoming_offer", &offer.parcel_id));
@@ -1988,7 +2252,9 @@ impl RelayApp {
                     ui.add_enabled_ui(!self.busy(), |ui| {
                         self.computer_panel(ui);
                         ui.add_space(16.0);
-                        if ui.button("Close").clicked() { close = true; }
+                        if ui.button("Close").clicked() {
+                            close = true;
+                        }
                     });
                 });
             if close {
@@ -2013,7 +2279,9 @@ impl RelayApp {
                     ui.collapsing("Complete safety code", |ui| fingerprint(ui, &contact.card.fingerprint));
                     if ui.button("Close").clicked() { close = true; }
                 });
-            if close { self.recipient_details = None; }
+            if close {
+                self.recipient_details = None;
+            }
         }
         if let Some(unlock) = self.unlock.clone() {
             let mut close = false;
@@ -2243,7 +2511,9 @@ impl eframe::App for RelayApp {
                         // A maximum is an assignment, not a clamp: never widen a
                         // narrow viewport to the preferred large-window width.
                         ui.set_max_width(ui.available_width().min(content_width));
-                        if !self.computer_open { self.messages(ui); }
+                        if !self.computer_open {
+                            self.messages(ui);
+                        }
                         ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| {
                             self.direct_attention(ui);
                             match self.screen {
@@ -2270,7 +2540,13 @@ fn transfer_progress(ui: &mut Ui, completed: u64, total: u64) {
         return;
     }
     let completed = completed.min(total);
-    ui.add(egui::ProgressBar::new(completed as f32 / total as f32).text(format!("{} of {}", bytes(completed), bytes(total))));
+    ui.add(
+        egui::ProgressBar::new(completed as f32 / total as f32).text(format!(
+            "{} of {}",
+            bytes(completed),
+            bytes(total)
+        )),
+    );
 }
 
 fn password_field(ui: &mut Ui, password: &mut Zeroizing<String>) {

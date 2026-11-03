@@ -77,14 +77,30 @@ impl Profile {
         store::import_contact(&connection, card)
     }
 
-    fn inspect_contact_card_unlocked(&self, card: &PeerCard, connection: &Connection) -> Result<Contact> {
+    fn inspect_contact_card_unlocked(
+        &self,
+        card: &PeerCard,
+        connection: &Connection,
+    ) -> Result<Contact> {
         identity::verify_card(card)?;
-        ensure!(card.fingerprint != self.card()?.fingerprint, "this is your own identity card; select another computer");
-        let existing = store::contacts(connection)?.into_iter().find(|c| c.card.fingerprint == card.fingerprint);
+        ensure!(
+            card.fingerprint != self.card()?.fingerprint,
+            "this is your own identity card; select another computer"
+        );
+        let existing = store::contacts(connection)?
+            .into_iter()
+            .find(|c| c.card.fingerprint == card.fingerprint);
         if let Some(existing) = &existing {
-            ensure!(existing.card.age_recipient == card.age_recipient && existing.card.signing_public_key == card.signing_public_key, "pinned identity cannot be replaced");
+            ensure!(
+                existing.card.age_recipient == card.age_recipient
+                    && existing.card.signing_public_key == card.signing_public_key,
+                "pinned identity cannot be replaced"
+            );
         }
-        Ok(Contact { card: card.clone(), verified: existing.is_some_and(|c| c.verified) })
+        Ok(Contact {
+            card: card.clone(),
+            verified: existing.is_some_and(|c| c.verified),
+        })
     }
 
     pub fn prepare_direct_handoff(&self, parcel_id: &str) -> Result<PreparedDirectHandoff> {
@@ -93,16 +109,25 @@ impl Profile {
         let connection = store::open(&self.home)?;
         ensure!(!self.cancelled(parcel_id)?, "delivery is cancelled");
         if let Some(record) = store::get(&connection, parcel_id, Direction::Outgoing)? {
-            ensure!(record.state != DeliveryState::Cancelled, "delivery is cancelled");
+            ensure!(
+                record.state != DeliveryState::Cancelled,
+                "delivery is cancelled"
+            );
         }
         let source = self.home.join("outbox").join(parcel_id);
         let authenticated = self.load_envelope(&source, &connection)?;
-        ensure!(authenticated.envelope.parcel_id == parcel_id && authenticated.envelope.sender.fingerprint == self.card()?.fingerprint, "outgoing identity or directory mismatch");
+        ensure!(
+            authenticated.envelope.parcel_id == parcel_id
+                && authenticated.envelope.sender.fingerprint == self.card()?.fingerprint,
+            "outgoing identity or directory mismatch"
+        );
         self.verify_outgoing_shards(&source, &authenticated)?;
         let entries = bundle_entries(&authenticated);
         let bundle_bytes = bundle_length(&entries)?;
         fsutil::available_space(&self.home, bundle_bytes)?;
-        let mut bundle = tempfile::Builder::new().prefix("direct-send-").tempfile_in(self.home.join("work"))?;
+        let mut bundle = tempfile::Builder::new()
+            .prefix("direct-send-")
+            .tempfile_in(self.home.join("work"))?;
         {
             let mut builder = tar::Builder::new(bundle.as_file_mut());
             for (path, bytes) in &entries {
@@ -113,17 +138,38 @@ impl Profile {
                     builder.append(&header, authenticated.signature.as_bytes())?;
                 } else {
                     let input = fsutil::read_bounded(&source.join(path), *bytes)?;
-                    let expected = authenticated.envelope.groups.iter().flat_map(|g| &g.shards).find(|s| &s.path == path).context("undeclared outgoing shard")?;
-                    ensure!(input.len() as u64 == *bytes && fsutil::digest(&input) == expected.sha256, "outgoing shard changed while preparing direct bundle");
+                    let expected = authenticated
+                        .envelope
+                        .groups
+                        .iter()
+                        .flat_map(|g| &g.shards)
+                        .find(|s| &s.path == path)
+                        .context("undeclared outgoing shard")?;
+                    ensure!(
+                        input.len() as u64 == *bytes && fsutil::digest(&input) == expected.sha256,
+                        "outgoing shard changed while preparing direct bundle"
+                    );
                     builder.append(&header, input.as_slice())?;
                 }
             }
             builder.finish()?;
         }
         bundle.as_file().sync_all()?;
-        ensure!(bundle.as_file().metadata()?.len() == bundle_bytes, "noncanonical direct bundle length");
-        let offer = DirectOfferArtifact { schema: 1, envelope_json: fsutil::utf8(&authenticated.raw)?.to_owned(), envelope_minisig: authenticated.signature, bundle_bytes };
-        Ok(PreparedDirectHandoff { offer, bundle, bundle_bytes })
+        ensure!(
+            bundle.as_file().metadata()?.len() == bundle_bytes,
+            "noncanonical direct bundle length"
+        );
+        let offer = DirectOfferArtifact {
+            schema: 1,
+            envelope_json: fsutil::utf8(&authenticated.raw)?.to_owned(),
+            envelope_minisig: authenticated.signature,
+            bundle_bytes,
+        };
+        Ok(PreparedDirectHandoff {
+            offer,
+            bundle,
+            bundle_bytes,
+        })
     }
 
     pub fn inspect_direct_offer(&self, artifact: &DirectOfferArtifact) -> Result<DirectOffer> {
@@ -134,14 +180,21 @@ impl Profile {
 
     /// Resolve a restarted transfer only when the exact authenticated offer is
     /// already staged. A ciphertext ID alone cannot identify signed metadata.
-    pub fn existing_direct_offer(&self, artifact: &DirectOfferArtifact) -> Result<Option<StagedDirectParcel>> {
+    pub fn existing_direct_offer(
+        &self,
+        artifact: &DirectOfferArtifact,
+    ) -> Result<Option<StagedDirectParcel>> {
         let _guard = fsutil::lock(&self.home)?;
         let connection = store::open(&self.home)?;
         let authenticated = self.authenticate_direct(artifact, &connection)?;
         self.existing_direct_offer_unlocked(&authenticated, &connection)
     }
 
-    fn existing_direct_offer_unlocked(&self, authenticated: &AuthenticatedEnvelope, connection: &Connection) -> Result<Option<StagedDirectParcel>> {
+    fn existing_direct_offer_unlocked(
+        &self,
+        authenticated: &AuthenticatedEnvelope,
+        connection: &Connection,
+    ) -> Result<Option<StagedDirectParcel>> {
         let root = self.home.join("direct/incoming");
         fsutil::no_symlink_components(&root)?;
         let destination = root.join(format!("{}.parcel", authenticated.envelope.parcel_id));
@@ -151,39 +204,67 @@ impl Profile {
             Ok(_) => {}
         }
         let existing = self.load_envelope(&destination, connection)?;
-        ensure!(existing.raw == authenticated.raw && existing.signature == authenticated.signature, "conflicting direct parcel already staged");
+        ensure!(
+            existing.raw == authenticated.raw && existing.signature == authenticated.signature,
+            "conflicting direct parcel already staged"
+        );
         let inspection = inspect_direct_directory(self, &destination, &existing)?;
-        ensure!(inspection.recoverable, "staged direct parcel exceeds repair budget");
-        Ok(Some(StagedDirectParcel { parcel_path: destination, inspection }))
+        ensure!(
+            inspection.recoverable,
+            "staged direct parcel exceeds repair budget"
+        );
+        Ok(Some(StagedDirectParcel {
+            parcel_path: destination,
+            inspection,
+        }))
     }
 
-    pub fn stage_direct_bundle(&self, artifact: &DirectOfferArtifact, bundle_file: &Path) -> Result<StagedDirectParcel> {
+    pub fn stage_direct_bundle(
+        &self,
+        artifact: &DirectOfferArtifact,
+        bundle_file: &Path,
+    ) -> Result<StagedDirectParcel> {
         let _guard = fsutil::lock(&self.home)?;
         let connection = store::open(&self.home)?;
         let authenticated = self.authenticate_direct(artifact, &connection)?;
         let path = fsutil::selected_file(bundle_file)?;
         let mut input = fsutil::open_read(&path)?;
-        ensure!(input.metadata()?.len() == artifact.bundle_bytes, "truncated or oversized direct bundle");
+        ensure!(
+            input.metadata()?.len() == artifact.bundle_bytes,
+            "truncated or oversized direct bundle"
+        );
         let root = self.home.join("direct/incoming");
         fsutil::no_symlink_components(&root)?;
         fsutil::available_space(&root, artifact.bundle_bytes)?;
-        let staging = tempfile::Builder::new().prefix(".stage-").tempdir_in(&root)?;
+        let staging = tempfile::Builder::new()
+            .prefix(".stage-")
+            .tempdir_in(&root)?;
         unpack_bundle(&mut input, staging.path(), &authenticated)?;
         let inspection = inspect_direct_directory(self, staging.path(), &authenticated)?;
-        ensure!(inspection.recoverable, "direct bundle exceeds repair budget");
+        ensure!(
+            inspection.recoverable,
+            "direct bundle exceeds repair budget"
+        );
         fsutil::sync_tree(staging.path())?;
         let destination = root.join(format!("{}.parcel", authenticated.envelope.parcel_id));
         match self.existing_direct_offer_unlocked(&authenticated, &connection)? {
             Some(existing) => {
                 for (name, bytes) in bundle_entries(&authenticated) {
-                    ensure!(archive::hash_file(&existing.parcel_path.join(&name), bytes)? == archive::hash_file(&staging.path().join(&name), bytes)?, "staged direct parcel conflicts with retry bytes");
+                    ensure!(
+                        archive::hash_file(&existing.parcel_path.join(&name), bytes)?
+                            == archive::hash_file(&staging.path().join(&name), bytes)?,
+                        "staged direct parcel conflicts with retry bytes"
+                    );
                 }
             }
             None => {
                 fsutil::publish_noreplace(staging.path(), &destination)?;
             }
         }
-        Ok(StagedDirectParcel { parcel_path: destination, inspection })
+        Ok(StagedDirectParcel {
+            parcel_path: destination,
+            inspection,
+        })
     }
 
     pub fn direct_offers(&self) -> Result<Vec<StagedDirectParcel>> {
@@ -195,15 +276,31 @@ impl Profile {
         for (count, entry) in fs::read_dir(&root)?.enumerate() {
             ensure!(count < 512, "too many staged direct entries");
             let entry = entry?;
-            let name = entry.file_name().into_string().map_err(|_| anyhow::anyhow!("non-UTF8 direct staging entry"))?;
-            if name.starts_with(".stage-") { continue; }
-            let id = name.strip_suffix(".parcel").context("unexpected direct staging entry")?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("non-UTF8 direct staging entry"))?;
+            if name.starts_with(".stage-") {
+                continue;
+            }
+            let id = name
+                .strip_suffix(".parcel")
+                .context("unexpected direct staging entry")?;
             fsutil::check_id(id)?;
             let authenticated = self.load_envelope(&entry.path(), &connection)?;
-            ensure!(authenticated.envelope.parcel_id == id, "direct stage directory ID mismatch");
+            ensure!(
+                authenticated.envelope.parcel_id == id,
+                "direct stage directory ID mismatch"
+            );
             let inspection = inspect_direct_directory(self, &entry.path(), &authenticated)?;
-            ensure!(inspection.recoverable, "staged direct parcel exceeds repair budget");
-            offers.push(StagedDirectParcel { parcel_path: entry.path(), inspection });
+            ensure!(
+                inspection.recoverable,
+                "staged direct parcel exceeds repair budget"
+            );
+            offers.push(StagedDirectParcel {
+                parcel_path: entry.path(),
+                inspection,
+            });
         }
         offers.sort_by(|a, b| a.inspection.parcel_id.cmp(&b.inspection.parcel_id));
         Ok(offers)
@@ -218,11 +315,23 @@ impl Profile {
         ensure!(!self.cancelled(parcel_id)?, "delivery is cancelled");
         let source = self.home.join("outbox").join(parcel_id);
         let authenticated = self.load_envelope(&source, &connection)?;
-        ensure!(authenticated.envelope.parcel_id == parcel_id && authenticated.envelope.sender.fingerprint == self.card()?.fingerprint, "outgoing identity or directory mismatch");
+        ensure!(
+            authenticated.envelope.parcel_id == parcel_id
+                && authenticated.envelope.sender.fingerprint == self.card()?.fingerprint,
+            "outgoing identity or directory mismatch"
+        );
         self.verify_outgoing_shards(&source, &authenticated)?;
-        let mut record = store::get(&connection, parcel_id, Direction::Outgoing)?.unwrap_or_else(|| self.outgoing_record(&authenticated.envelope, source, DeliveryState::Ready));
-        ensure!(record.state != DeliveryState::Cancelled, "delivery is cancelled");
-        if record.state != DeliveryState::Confirmed { record.state = DeliveryState::WaitingReceipt; }
+        let mut record =
+            store::get(&connection, parcel_id, Direction::Outgoing)?.unwrap_or_else(|| {
+                self.outgoing_record(&authenticated.envelope, source, DeliveryState::Ready)
+            });
+        ensure!(
+            record.state != DeliveryState::Cancelled,
+            "delivery is cancelled"
+        );
+        if record.state != DeliveryState::Confirmed {
+            record.state = DeliveryState::WaitingReceipt;
+        }
         record.local_error = None;
         record.updated_at = fsutil::now();
         store::save(&connection, &record)?;
@@ -233,17 +342,30 @@ impl Profile {
         let _guard = fsutil::lock(&self.home)?;
         fsutil::check_id(parcel_id)?;
         let connection = store::open(&self.home)?;
-        let authenticated = match self.verify_committed(&self.home.join("inbox").join(parcel_id), &connection) {
+        let authenticated = match self
+            .verify_committed(&self.home.join("inbox").join(parcel_id), &connection)
+        {
             Ok(value) => value,
-            Err(error) => { self.mark_failed(&connection, parcel_id)?; return Err(error).context("current received content cannot authorize a receipt"); }
+            Err(error) => {
+                self.mark_failed(&connection, parcel_id)?;
+                return Err(error).context("current received content cannot authorize a receipt");
+            }
         };
-        let (raw, signature) = self.read_receipt(&self.home.join("receipts").join(parcel_id), &authenticated)?;
-        Ok(ReceiptArtifact { receipt_json: fsutil::utf8(&raw)?.to_owned(), receipt_minisig: signature })
+        let (raw, signature) =
+            self.read_receipt(&self.home.join("receipts").join(parcel_id), &authenticated)?;
+        Ok(ReceiptArtifact {
+            receipt_json: fsutil::utf8(&raw)?.to_owned(),
+            receipt_minisig: signature,
+        })
     }
 
     pub fn import_receipt_artifact(&self, artifact: &ReceiptArtifact) -> Result<ParcelRecord> {
         let _guard = fsutil::lock(&self.home)?;
-        self.import_receipt_bytes(artifact.receipt_json.as_bytes().to_vec(), artifact.receipt_minisig.clone(), &store::open(&self.home)?)
+        self.import_receipt_bytes(
+            artifact.receipt_json.as_bytes().to_vec(),
+            artifact.receipt_minisig.clone(),
+            &store::open(&self.home)?,
+        )
     }
 
     /// Remove only an owned encrypted stage whose exact envelope is backed by
@@ -251,44 +373,86 @@ impl Profile {
     pub fn finalize_direct_offer(&self, parcel_id: &str) -> Result<bool> {
         let _guard = fsutil::lock(&self.home)?;
         fsutil::check_id(parcel_id)?;
-        let destination = self.home.join("direct/incoming").join(format!("{parcel_id}.parcel"));
+        let destination = self
+            .home
+            .join("direct/incoming")
+            .join(format!("{parcel_id}.parcel"));
         match fs::symlink_metadata(&destination) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error.into()),
             Ok(_) => {}
         }
-        if !self.home.join("receipts").join(parcel_id).try_exists()? { return Ok(false); }
+        if !self.home.join("receipts").join(parcel_id).try_exists()? {
+            return Ok(false);
+        }
         let connection = store::open(&self.home)?;
-        let committed = self.verify_committed(&self.home.join("inbox").join(parcel_id), &connection)?;
+        let committed =
+            self.verify_committed(&self.home.join("inbox").join(parcel_id), &connection)?;
         self.read_receipt(&self.home.join("receipts").join(parcel_id), &committed)?;
         let staged = self.load_envelope(&destination, &connection)?;
-        ensure!(committed.raw == staged.raw && committed.signature == staged.signature, "staged parcel conflicts with saved receipt");
+        ensure!(
+            committed.raw == staged.raw && committed.signature == staged.signature,
+            "staged parcel conflicts with saved receipt"
+        );
         inspect_direct_directory(self, &destination, &staged)?;
         // Remove the queue entry atomically before cleaning its verified files.
         // An interrupted cleanup cannot leave a half-deleted incoming offer.
-        let cleanup = tempfile::Builder::new().prefix("direct-finalized-").tempdir_in(self.home.join("work"))?;
+        let cleanup = tempfile::Builder::new()
+            .prefix("direct-finalized-")
+            .tempdir_in(self.home.join("work"))?;
         let retired = cleanup.path().join("parcel");
         fsutil::publish_noreplace(&destination, &retired)?;
         fsutil::sync_dir(destination.parent().context("direct stage needs parent")?)?;
-        for (path, _) in bundle_entries(&staged) { fs::remove_file(retired.join(path))?; }
-        for group in &staged.envelope.groups { fs::remove_dir(retired.join(format!("groups/g{:03}", group.index)))?; }
+        for (path, _) in bundle_entries(&staged) {
+            fs::remove_file(retired.join(path))?;
+        }
+        for group in &staged.envelope.groups {
+            fs::remove_dir(retired.join(format!("groups/g{:03}", group.index)))?;
+        }
         fs::remove_dir(retired.join("groups"))?;
         fs::remove_dir(&retired)?;
         Ok(true)
     }
 
-    fn authenticate_direct(&self, artifact: &DirectOfferArtifact, connection: &Connection) -> Result<AuthenticatedEnvelope> {
-        ensure!(artifact.schema == 1 && artifact.envelope_json.len() as u64 <= MAX_ENVELOPE && artifact.envelope_minisig.len() <= 2048, "unsupported or oversized direct offer");
-        let authenticated = self.authenticate(artifact.envelope_json.as_bytes().to_vec(), artifact.envelope_minisig.clone(), connection)?;
-        ensure!(authenticated.envelope.recipient.fingerprint == self.card()?.fingerprint, "direct offer belongs to a different recipient");
-        ensure!(artifact.bundle_bytes == bundle_length(&bundle_entries(&authenticated))?, "direct bundle length does not match authenticated resources");
+    fn authenticate_direct(
+        &self,
+        artifact: &DirectOfferArtifact,
+        connection: &Connection,
+    ) -> Result<AuthenticatedEnvelope> {
+        ensure!(
+            artifact.schema == 1
+                && artifact.envelope_json.len() as u64 <= MAX_ENVELOPE
+                && artifact.envelope_minisig.len() <= 2048,
+            "unsupported or oversized direct offer"
+        );
+        let authenticated = self.authenticate(
+            artifact.envelope_json.as_bytes().to_vec(),
+            artifact.envelope_minisig.clone(),
+            connection,
+        )?;
+        ensure!(
+            authenticated.envelope.recipient.fingerprint == self.card()?.fingerprint,
+            "direct offer belongs to a different recipient"
+        );
+        ensure!(
+            artifact.bundle_bytes == bundle_length(&bundle_entries(&authenticated))?,
+            "direct bundle length does not match authenticated resources"
+        );
         Ok(authenticated)
     }
 }
 
 fn offer_details(authenticated: &AuthenticatedEnvelope, bundle_bytes: u64) -> DirectOffer {
     let envelope = &authenticated.envelope;
-    DirectOffer { parcel_id: envelope.parcel_id.clone(), sender: envelope.sender.fingerprint.clone(), recipient: envelope.recipient.fingerprint.clone(), files: envelope.files, total_bytes: envelope.total_bytes, ciphertext_bytes: envelope.ciphertext_bytes, bundle_bytes }
+    DirectOffer {
+        parcel_id: envelope.parcel_id.clone(),
+        sender: envelope.sender.fingerprint.clone(),
+        recipient: envelope.recipient.fingerprint.clone(),
+        files: envelope.files,
+        total_bytes: envelope.total_bytes,
+        ciphertext_bytes: envelope.ciphertext_bytes,
+        bundle_bytes,
+    }
 }
 
 fn bundle_entries(authenticated: &AuthenticatedEnvelope) -> Vec<(String, u64)> {
@@ -298,56 +462,121 @@ fn bundle_entries(authenticated: &AuthenticatedEnvelope) -> Vec<(String, u64)> {
         entries.push((signature.to_owned(), authenticated.signature.len() as u64));
     }
     for group in &authenticated.envelope.groups {
-        for shard in &group.shards { entries.push((shard.path.clone(), group.shard_bytes as u64)); }
+        for shard in &group.shards {
+            entries.push((shard.path.clone(), group.shard_bytes as u64));
+        }
     }
     entries
 }
 
 fn bundle_length(entries: &[(String, u64)]) -> Result<u64> {
     let length = entries.iter().try_fold(1024u64, |total, (_, bytes)| {
-        total.checked_add(512 + bytes.div_ceil(512) * 512).context("direct bundle size overflow")
+        total
+            .checked_add(512 + bytes.div_ceil(512) * 512)
+            .context("direct bundle size overflow")
     })?;
     ensure!(length <= MAX_DIRECT_BUNDLE, "direct bundle exceeds 100 MiB");
     Ok(length)
 }
 
-fn unpack_bundle(input: &mut File, output: &Path, authenticated: &AuthenticatedEnvelope) -> Result<()> {
+fn unpack_bundle(
+    input: &mut File,
+    output: &Path,
+    authenticated: &AuthenticatedEnvelope,
+) -> Result<()> {
     for (path, expected_bytes) in bundle_entries(authenticated) {
         let bytes = archive::read_header(input, &path, expected_bytes)?;
-        ensure!(bytes == expected_bytes, "direct entry length disagrees with signed envelope");
+        ensure!(
+            bytes == expected_bytes,
+            "direct entry length disagrees with signed envelope"
+        );
         let target = output.join(&path);
         fsutil::private_dir(target.parent().context("direct entry needs parent")?)?;
         let mut file = fsutil::create_new(&target)?;
-        ensure!(std::io::copy(&mut (&mut *input).take(bytes), &mut file)? == bytes, "truncated direct entry");
+        ensure!(
+            std::io::copy(&mut (&mut *input).take(bytes), &mut file)? == bytes,
+            "truncated direct entry"
+        );
         file.flush()?;
         file.sync_all()?;
         archive::padding(input, bytes)?;
     }
     let mut trailer = [0u8; 1024];
     input.read_exact(&mut trailer)?;
-    ensure!(trailer.iter().all(|b| *b == 0), "undeclared direct archive entries");
+    ensure!(
+        trailer.iter().all(|b| *b == 0),
+        "undeclared direct archive entries"
+    );
     let mut extra = [0];
     ensure!(input.read(&mut extra)? == 0, "trailing direct archive data");
     Ok(())
 }
 
-fn inspect_direct_directory(profile: &Profile, path: &Path, authenticated: &AuthenticatedEnvelope) -> Result<Inspection> {
+fn inspect_direct_directory(
+    profile: &Profile,
+    path: &Path,
+    authenticated: &AuthenticatedEnvelope,
+) -> Result<Inspection> {
     fsutil::no_symlink_components(path)?;
-    profile.exact_entries(path, &["envelope.json", "envelope.minisig", "envelope-copy.json", "envelope-copy.minisig", "groups"])?;
-    let expected_groups: Vec<_> = authenticated.envelope.groups.iter().map(|g| format!("g{:03}", g.index)).collect();
-    profile.exact_entries(&path.join("groups"), &expected_groups.iter().map(String::as_str).collect::<Vec<_>>())?;
+    profile.exact_entries(
+        path,
+        &[
+            "envelope.json",
+            "envelope.minisig",
+            "envelope-copy.json",
+            "envelope-copy.minisig",
+            "groups",
+        ],
+    )?;
+    let expected_groups: Vec<_> = authenticated
+        .envelope
+        .groups
+        .iter()
+        .map(|g| format!("g{:03}", g.index))
+        .collect();
+    profile.exact_entries(
+        &path.join("groups"),
+        &expected_groups
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+    )?;
     for group in &authenticated.envelope.groups {
-        let names: Vec<_> = (0..group.shards.len()).map(|i| format!("s{i:03}.bin")).collect();
-        profile.exact_entries(&path.join(format!("groups/g{:03}", group.index)), &names.iter().map(String::as_str).collect::<Vec<_>>())?;
+        let names: Vec<_> = (0..group.shards.len())
+            .map(|i| format!("s{i:03}.bin"))
+            .collect();
+        profile.exact_entries(
+            &path.join(format!("groups/g{:03}", group.index)),
+            &names.iter().map(String::as_str).collect::<Vec<_>>(),
+        )?;
     }
     for (name, bytes) in bundle_entries(authenticated) {
         let file = fsutil::open_read(&path.join(&name))?;
-        ensure!(file.metadata()?.len() == bytes, "direct entry length changed");
-        if name.ends_with(".json") { ensure!(fsutil::read_bounded(&path.join(name), MAX_ENVELOPE)? == authenticated.raw, "direct envelope differs from accepted offer"); }
-        else if name.ends_with(".minisig") { ensure!(fsutil::read_bounded(&path.join(name), 2048)? == authenticated.signature.as_bytes(), "direct signature differs from accepted offer"); }
+        ensure!(
+            file.metadata()?.len() == bytes,
+            "direct entry length changed"
+        );
+        if name.ends_with(".json") {
+            ensure!(
+                fsutil::read_bounded(&path.join(name), MAX_ENVELOPE)? == authenticated.raw,
+                "direct envelope differs from accepted offer"
+            );
+        } else if name.ends_with(".minisig") {
+            ensure!(
+                fsutil::read_bounded(&path.join(name), 2048)? == authenticated.signature.as_bytes(),
+                "direct signature differs from accepted offer"
+            );
+        }
     }
     let groups = codec::inspect(path, &authenticated.envelope.groups)?;
-    Ok(Inspection { parcel_id: authenticated.envelope.parcel_id.clone(), sender: authenticated.envelope.sender.fingerprint.clone(), recipient: authenticated.envelope.recipient.fingerprint.clone(), ciphertext_bytes: authenticated.envelope.ciphertext_bytes, recoverable: groups.iter().all(|g| g.recoverable), groups })
+    Ok(Inspection {
+        parcel_id: authenticated.envelope.parcel_id.clone(),
+        sender: authenticated.envelope.sender.fingerprint.clone(),
+        recipient: authenticated.envelope.recipient.fingerprint.clone(),
+        ciphertext_bytes: authenticated.envelope.ciphertext_bytes,
+        recoverable: groups.iter().all(|g| g.recoverable),
+        groups,
+    })
 }
 
 #[cfg(test)]
@@ -379,7 +608,13 @@ mod tests {
         output.sync_all()?;
         let staged = bob.stage_direct_bundle(&prepared.offer, &bundle)?;
         let restarted_bob = Profile::open(root.join("bob"))?;
-        assert_eq!(restarted_bob.existing_direct_offer(&prepared.offer)?.unwrap().parcel_path, staged.parcel_path);
+        assert_eq!(
+            restarted_bob
+                .existing_direct_offer(&prepared.offer)?
+                .unwrap()
+                .parcel_path,
+            staged.parcel_path
+        );
 
         // The ciphertext digest deliberately stays identical. This is a real,
         // independently valid signature, not a malformed-signature test.
@@ -390,9 +625,18 @@ mod tests {
         let mut different = prepared.offer.clone();
         different.envelope_json = fsutil::utf8(&raw)?.to_owned();
         different.envelope_minisig = identity::sign(&unlocked.signing, &raw)?;
-        assert_eq!(restarted_bob.inspect_direct_offer(&different)?.parcel_id, record.parcel_id);
+        assert_eq!(
+            restarted_bob.inspect_direct_offer(&different)?.parcel_id,
+            record.parcel_id
+        );
         assert!(restarted_bob.existing_direct_offer(&different).is_err());
-        assert_eq!(restarted_bob.existing_direct_offer(&prepared.offer)?.unwrap().parcel_path, staged.parcel_path);
+        assert_eq!(
+            restarted_bob
+                .existing_direct_offer(&prepared.offer)?
+                .unwrap()
+                .parcel_path,
+            staged.parcel_path
+        );
         assert!(restarted_bob.deliveries()?.is_empty());
         assert!(restarted_bob.receipt_artifact(&record.parcel_id).is_err());
         Ok(())
