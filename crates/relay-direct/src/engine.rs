@@ -1,4 +1,5 @@
 use crate::discovery::{Discovery, Event};
+use crate::diagnostics::{Recorder, Stage};
 use crate::wire::{
     self, Decision, Empty, Kind, PairRequest, PairStatusRequest, ParcelRequest, Reply,
 };
@@ -90,6 +91,7 @@ struct Shared {
     next_socket: AtomicU64,
     address: Mutex<Option<SocketAddrV4>>,
     on_change: Arc<dyn Fn() + Send + Sync>,
+    diagnostics: Arc<Recorder>,
 }
 
 impl Shared {
@@ -266,6 +268,7 @@ impl DirectHandle {
             incoming: Vec::new(),
             outgoing: Vec::new(),
         };
+        let diagnostics = Recorder::new(on_change.clone());
         let shared = Arc::new(Shared {
             profile,
             state: Mutex::new(State {
@@ -286,6 +289,7 @@ impl DirectHandle {
             next_socket: AtomicU64::new(1),
             address: Mutex::new(None),
             on_change,
+            diagnostics,
         });
         let (commands, receiver) = mpsc::sync_channel(32);
         let (done_tx, done) = mpsc::sync_channel(1);
@@ -303,6 +307,20 @@ impl DirectHandle {
     }
     pub fn snapshot(&self) -> DirectSnapshot {
         lock(&self.shared.state).snapshot.clone()
+    }
+    pub fn diagnostics(&self) -> DirectDiagnostics {
+        let (valid_candidates, active_probes, active_jobs, healthy_peers) = {
+            let state = lock(&self.shared.state);
+            (state.candidates.values().filter(|candidate| candidate.seen.elapsed() < CANDIDATE_TTL).count(),
+                state.jobs.iter().filter(|key| key.starts_with("probe:")).count(),
+                state.jobs.len(), state.peers.values().filter(|peer| peer.seen.elapsed() < Duration::from_secs(35)).count())
+        };
+        let mut result = self.shared.diagnostics.snapshot();
+        result.valid_candidates = valid_candidates;
+        result.active_probes = active_probes;
+        result.active_jobs = active_jobs;
+        result.healthy_peers = healthy_peers;
+        result
     }
     pub fn command(&self, command: DirectCommand) -> std::result::Result<(), DirectCommandError> {
         if self.shared.stopped.load(Ordering::Acquire) {
@@ -518,7 +536,11 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
                 match event {
                     Event::Resolved { service, addresses } => probe(&shared, service, addresses),
                     Event::Removed(service) => forget_candidate(&shared, &service),
-                    Event::Error(error) => discovery_error(&shared, error),
+                    Event::Error(error) => {
+                        shared.diagnostics.note(Stage::DiscoveryError, "mDNS reported a registration or daemon error");
+                        discovery_error(&shared, error);
+                    }
+                    Event::Observed(stage, message) => shared.diagnostics.note(stage, &message),
                 }
             }
         }
@@ -689,10 +711,37 @@ fn restore_profile(shared: &Arc<Shared>) {
 }
 
 fn forget_candidate(shared: &Shared, service: &str) {
+    shared.diagnostics.note(Stage::Removed, &format!("candidate={} removed", candidate_id(service)));
     shared.edit(|state| {
         state.candidates.remove(service);
         state.peers.retain(|_, peer| peer.service != service);
     });
+}
+
+fn candidate_id(service: &str) -> String {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut hash = DefaultHasher::new();
+    service.hash(&mut hash);
+    format!("{:016x}", hash.finish())
+}
+
+fn address_class(address: SocketAddrV4) -> &'static str {
+    if address.ip().is_loopback() { "loopback" }
+    else if address.ip().is_link_local() { "link-local" }
+    else { "private" }
+}
+
+fn io_failure(error: &anyhow::Error) -> String {
+    if let Some(error) = error.chain().find_map(|cause| cause.downcast_ref::<std::io::Error>()) {
+        format!("I/O kind={:?} os_code={:?}", error.kind(), error.raw_os_error())
+    } else { "Card reply rejected or malformed".to_owned() }
+}
+
+fn candidate_rejection(state: &State, service: &str, addresses: &[SocketAddrV4]) -> Option<&'static str> {
+    let Some(candidate) = state.candidates.get(service) else { return Some("removed"); };
+    if candidate.seen.elapsed() >= CANDIDATE_TTL { Some("expired") }
+    else if candidate.addresses != addresses { Some("addresses changed") }
+    else { None }
 }
 
 fn candidate_current(state: &State, service: &str, addresses: &[SocketAddrV4]) -> bool {
@@ -707,9 +756,13 @@ fn probe(shared: &Arc<Shared>, service: String, mut addresses: Vec<SocketAddrV4>
     addresses.dedup();
     addresses.truncate(8);
     if addresses.is_empty() {
+        shared.diagnostics.note(Stage::ProbeDiscarded, "resolved service has no supported local IPv4 addresses");
         forget_candidate(shared, &service);
         return;
     }
+    let identifier = candidate_id(&service);
+    let mut retained = false;
+    let mut evicted = false;
     {
         let mut state = lock(&shared.state);
         let now = Instant::now();
@@ -719,6 +772,7 @@ fn probe(shared: &Arc<Shared>, service: String, mut addresses: Vec<SocketAddrV4>
                 candidate.next_probe = now;
             }
             candidate.seen = now;
+            retained = true;
         } else {
             if state.candidates.len() >= MAX_PEERS {
                 // Keep the latest unresolved announcements without allowing
@@ -733,9 +787,11 @@ fn probe(shared: &Arc<Shared>, service: String, mut addresses: Vec<SocketAddrV4>
                     .map(|(service, _)| service.clone());
                 if let Some(oldest) = oldest {
                     state.candidates.remove(&oldest);
+                    evicted = true;
                 }
             }
             if state.candidates.len() < MAX_PEERS {
+                retained = true;
                 state.candidates.insert(
                     service,
                     Candidate {
@@ -747,12 +803,15 @@ fn probe(shared: &Arc<Shared>, service: String, mut addresses: Vec<SocketAddrV4>
             }
         }
     }
+    if !retained { shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={identifier} capacity reached; healthy peers protected")); }
+    if evicted { shared.diagnostics.note(Stage::ProbeDiscarded, "oldest unresolved candidate evicted at the bounded limit"); }
     retry_candidates(shared);
 }
 
 fn retry_candidates(shared: &Arc<Shared>) {
     let due = {
         let mut state = lock(&shared.state);
+        let expired: Vec<_> = state.candidates.iter().filter(|(_, candidate)| candidate.seen.elapsed() >= CANDIDATE_TTL).map(|(service, _)| service.clone()).collect();
         state
             .candidates
             .retain(|_, candidate| candidate.seen.elapsed() < CANDIDATE_TTL);
@@ -779,6 +838,9 @@ fn retry_candidates(shared: &Arc<Shared>) {
         // Candidates that have never obtained a worker retain the oldest due time.
         due.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
         drop(state);
+        for service in expired {
+            shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} expired", candidate_id(&service)));
+        }
         if expired_peers {
             shared.edit(|state| {
                 let live: HashSet<_> = state.candidates.keys().cloned().collect();
@@ -793,9 +855,15 @@ fn retry_candidates(shared: &Arc<Shared>) {
         {
             let mut state = lock(&shared.state);
             if state.jobs.len() >= MAX_JOBS {
+                drop(state);
+                shared.diagnostics.note(Stage::ProbeDiscarded, "worker capacity busy; due candidates retained");
                 break;
             }
-            if state.jobs.contains(&key) || !candidate_current(&state, &service, &addresses) {
+            let rejection = if state.jobs.contains(&key) { Some("same service probe in flight; latest candidate retained") }
+                else { candidate_rejection(&state, &service, &addresses) };
+            if let Some(reason) = rejection {
+                drop(state);
+                shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} {reason}", candidate_id(&service)));
                 continue;
             }
             if let Some(candidate) = state.candidates.get_mut(&service) {
@@ -805,9 +873,13 @@ fn retry_candidates(shared: &Arc<Shared>) {
         let attempted_service = service.clone();
         let attempted_addresses = addresses.clone();
         let started = shared.start_job(key, move |shared| {
+            shared.diagnostics.note(Stage::ProbeStarted, &format!("candidate={} Card probe started, {} addresses", candidate_id(&service), addresses.len()));
             let own = match shared.profile.public_card() {
                 Ok(card) => card,
-                Err(_) => return,
+                Err(_) => {
+                    shared.diagnostics.note(Stage::ProbeFailed, "local public identity unavailable");
+                    return;
+                }
             };
             // Retain the latest resolved address set, but probe a previously
             // successful endpoint first when it is still advertised. Slow stale
@@ -833,38 +905,54 @@ fn retry_candidates(shared: &Arc<Shared>) {
             }
             let mut saw_own = false;
             for address in &ordered_addresses {
-                if shared.stopped.load(Ordering::Acquire)
-                    || !candidate_current(&lock(&shared.state), &service, &addresses)
-                {
+                if shared.stopped.load(Ordering::Acquire) { return; }
+                if let Some(reason) = candidate_rejection(&lock(&shared.state), &service, &addresses) {
+                    shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} {reason}", candidate_id(&service)));
                     return;
                 }
-                let Ok(Reply::Card { card }) = shared.rpc(*address, Kind::Card, &Empty {}) else {
-                    continue;
+                let card = match shared.rpc(*address, Kind::Card, &Empty {}) {
+                    Ok(Reply::Card { card }) => card,
+                    Ok(_) => {
+                        shared.diagnostics.note(Stage::ProbeFailed, "Card request received an unexpected reply type");
+                        continue;
+                    }
+                    Err(error) => {
+                        shared.diagnostics.note(Stage::ProbeFailed, &format!("candidate={} {} port={} {}", candidate_id(&service), address_class(*address), address.port(), io_failure(&error)));
+                        continue;
+                    }
                 };
-                if !candidate_current(&lock(&shared.state), &service, &addresses) {
+                if let Some(reason) = candidate_rejection(&lock(&shared.state), &service, &addresses) {
+                    shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} {reason}", candidate_id(&service)));
                     return;
                 }
                 if card.fingerprint == own.fingerprint {
                     saw_own = true;
+                    shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} own identity excluded", candidate_id(&service)));
                     continue;
                 }
                 if previous
                     .as_ref()
                     .is_some_and(|(fingerprint, _)| fingerprint != &card.fingerprint)
                 {
+                    shared.diagnostics.note(Stage::ProbeFailed, "Card fingerprint differed from the previously checked device");
                     continue;
                 }
                 let Ok(contact) = shared.profile.inspect_contact_card(&card) else {
+                    shared.diagnostics.note(Stage::ProbeFailed, &format!("candidate={} public identity validation rejected", candidate_id(&service)));
                     continue;
                 };
                 let id = PeerId(card.fingerprint.clone());
                 let mut ordered = vec![*address];
                 ordered.extend(addresses.iter().filter(|a| *a != address).copied());
+                let mut published = false;
+                let mut rejected = None;
                 shared.edit(|state| {
-                    if !candidate_current(state, &service, &addresses) {
+                    if let Some(reason) = candidate_rejection(state, &service, &addresses) {
+                        rejected = Some(reason);
                         return;
                     }
                     if state.peers.len() < MAX_PEERS || state.peers.contains_key(&id) {
+                        published = true;
                         state.snapshot.service = ServiceState::Ready;
                         state.peers.insert(
                             id.clone(),
@@ -882,6 +970,8 @@ fn retry_candidates(shared: &Arc<Shared>) {
                         }
                     }
                 });
+                if published { shared.diagnostics.note(Stage::ProbeSucceeded, &format!("candidate={} validated peer published", candidate_id(&service))); }
+                if let Some(reason) = rejected { shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} {reason}", candidate_id(&service))); }
                 return;
             }
             // A self announcement is not a peer or a failure. Other failed
@@ -898,6 +988,7 @@ fn retry_candidates(shared: &Arc<Shared>) {
             }
         });
         if !started {
+            shared.diagnostics.note(Stage::ProbeDiscarded, &format!("candidate={} admission busy; retained for retry", candidate_id(&attempted_service)));
             let mut state = lock(&shared.state);
             if let Some(candidate) = state.candidates.get_mut(&attempted_service) {
                 if candidate.addresses == attempted_addresses && candidate.next_probe == next_probe
@@ -1735,6 +1826,9 @@ mod tests {
             alice.contacts().unwrap().is_empty(),
             "Passive discovery must not import or trust contacts"
         );
+        wait_until(|| a.diagnostics().probe_succeeded > 0);
+        assert!(a.diagnostics().probe_started > 0);
+        assert_eq!(a.diagnostics().healthy_peers, 1);
         a.command(DirectCommand::RequestPairing {
             peer: PeerId(b_card.fingerprint.clone()),
         })
