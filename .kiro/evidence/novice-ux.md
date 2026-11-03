@@ -41,7 +41,10 @@ task-oriented application workflow in `app.rs`, `main.rs` and `work.rs`.
 This includes Home/People/Send/Receive/Activity navigation, setup continuation,
 password sheets, drag-and-drop, bounded drive discovery, automatic inspection,
 confirmation-return actions, opening verified saved folders and recovery UI.
-Codex also authored five bounded-discovery tests for remote CI.
+Codex also authored five bounded-discovery tests for remote CI. The actual GUI
+walkthrough then exposed colliding connection-card default names and singular
+file-count wording. Codex fixed both and added two filename-boundary tests;
+these are review/runtime amendments rather than Kiro-authored changes.
 
 After reviewing Kiro's modules, Codex set consistent rounded widget/primary
 button corners and changed the source headers to make remote validation's

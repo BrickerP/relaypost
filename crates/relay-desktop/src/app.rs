@@ -539,8 +539,8 @@ impl RelayApp {
                 };
                 ui.label(RichText::new(heading).font(display_font(25.0)));
                 ui.label(format!(
-                    "To {name} · {} files · {}",
-                    record.files,
+                    "To {name} · {} · {}",
+                    file_count(record.files),
                     bytes(record.total_bytes)
                 ));
                 ui.add_space(16.0);
@@ -679,8 +679,8 @@ impl RelayApp {
                 }
                 ui.add_space(8.0);
                 ui.label(format!(
-                    "{} files · {}",
-                    self.inputs.len(),
+                    "{} · {}",
+                    file_count(self.inputs.len()),
                     self.selected_bytes
                         .map(bytes)
                         .unwrap_or_else(|| "Checking size…".to_owned())
@@ -761,7 +761,11 @@ impl RelayApp {
             if result.record.state == DeliveryState::Failed {
                 surface(ui, |ui| {
                     ui.label(
-                        RichText::new("Saved files need attention")
+                        RichText::new(if result.record.files == 1 {
+                            "Saved file needs attention"
+                        } else {
+                            "Saved files need attention"
+                        })
                             .font(display_font(24.0))
                             .color(RED),
                     );
@@ -777,13 +781,17 @@ impl RelayApp {
             let name = self.other_name(&result.record);
             surface(ui, |ui| {
                 ui.label(
-                    RichText::new("Files saved on this computer")
+                    RichText::new(if result.record.files == 1 {
+                        "File saved on this computer"
+                    } else {
+                        "Files saved on this computer"
+                    })
                         .font(display_font(25.0))
                         .color(GREEN),
                 );
                 ui.label(format!(
-                    "From {name} · {} files verified byte for byte",
-                    result.record.files
+                    "From {name} · {} verified byte for byte",
+                    file_count(result.record.files)
                 ));
                 draw_record(ui, &result.record);
                 if result.repaired_shards > 0 {
@@ -799,7 +807,7 @@ impl RelayApp {
                     ));
                 } else {
                     ui.label(format!(
-                        "Return a confirmation so {name} knows the files were saved correctly."
+                        "Return a confirmation so {name} knows the transfer was saved correctly."
                     ));
                 }
                 if primary(
@@ -943,14 +951,14 @@ impl RelayApp {
                     .show(ui, |ui| {
                         for record in &records {
                             let label = format!(
-                                "{} {} · {} files · {}",
+                                "{} {} · {} · {}",
                                 if record.direction == Direction::Outgoing {
                                     "To"
                                 } else {
                                     "From"
                                 },
                                 self.other_name(record),
-                                record.files,
+                                file_count(record.files),
                                 bytes(record.total_bytes)
                             );
                             let selected =
@@ -1159,7 +1167,7 @@ impl RelayApp {
                 if ui.button("Save my connection card…").clicked() {
                     if let Some(path) = rfd::FileDialog::new()
                         .set_title("Save your RelayPost connection card")
-                        .set_file_name("relaypost-card.json")
+                        .set_file_name(connection_card_filename(&card.name, &card.fingerprint))
                         .add_filter("Connection card", &["json"])
                         .save_file()
                     {
@@ -1281,8 +1289,8 @@ impl RelayApp {
                     .font(display_font(23.0)),
                 );
                 ui.label(format!(
-                    "{} files · {} · choose a drive to carry this protected copy.",
-                    record.files,
+                    "{} · {} · choose a drive to carry this protected copy.",
+                    file_count(record.files),
                     bytes(record.total_bytes)
                 ));
                 ui.add_space(16.0);
@@ -1370,14 +1378,14 @@ impl RelayApp {
             for record in self.deliveries.clone().iter().rev().take(3) {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(format!(
-                        "{} {} · {} files",
+                        "{} {} · {}",
                         if record.direction == Direction::Outgoing {
                             "To"
                         } else {
                             "From"
                         },
                         self.other_name(record),
-                        record.files
+                        file_count(record.files)
                     ));
                     state_badge(ui, &record.state);
                     if ui.small_button("View").clicked() {
@@ -1562,8 +1570,8 @@ impl RelayApp {
             if !snap.source_sha256.is_empty() && snap.source_sha256 == snap.received_sha256 {
                 ui.label(
                     RichText::new(format!(
-                        "MATCH / SHA-256 verified for all {} files",
-                        snap.source_sha256.len()
+                        "MATCH / SHA-256 verified for all {}",
+                        file_count(snap.source_sha256.len())
                     ))
                     .strong()
                     .color(GREEN),
@@ -2045,8 +2053,8 @@ fn draw_record(ui: &mut Ui, record: &ParcelRecord) {
         handoff_ribbon(ui, stage);
     }
     ui.label(format!(
-        "{} files · {}",
-        record.files,
+        "{} · {}",
+        file_count(record.files),
         bytes(record.total_bytes)
     ));
     ui.collapsing("Technical record",|ui| {
@@ -2167,6 +2175,30 @@ fn state_description(state: &DeliveryState) -> &'static str {
     }
 }
 
+fn connection_card_filename(device_name: &str, fingerprint: &str) -> String {
+    let mut name = String::new();
+    for ch in device_name.chars().take(40) {
+        if ch.is_alphanumeric() {
+            name.push(ch);
+        } else if !name.is_empty() && !name.ends_with('-') {
+            name.push('-');
+        }
+    }
+    let name = name.trim_end_matches('-');
+    let name = if name.is_empty() { "computer" } else { name };
+    // This short suffix distinguishes file names; trust still uses the full code.
+    let code: String = fingerprint
+        .chars()
+        .filter(|ch| ch.is_ascii_hexdigit())
+        .take(12)
+        .collect();
+    format!("{name}-{code}-relaypost-card.json")
+}
+
+fn file_count(value: usize) -> String {
+    format!("{value} {}", if value == 1 { "file" } else { "files" })
+}
+
 fn bytes(value: u64) -> String {
     if value >= 1024 * 1024 {
         format!("{:.2} MiB", value as f64 / (1024.0 * 1024.0))
@@ -2182,5 +2214,30 @@ fn short(value: &str) -> String {
         format!("{}…", value.chars().take(18).collect::<String>())
     } else {
         value.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::connection_card_filename;
+
+    #[test]
+    fn connection_card_names_stay_single_bounded_file_names() {
+        for name in ["../Alice\\Mac\0\n", "///", "小明的电脑", &"A".repeat(1000)] {
+            let filename = connection_card_filename(name, &"a1".repeat(32));
+            assert!(!filename.starts_with('.'));
+            assert!(!filename.contains(['/', '\\']));
+            assert!(!filename.chars().any(char::is_control));
+            assert!(filename.len() <= 200);
+            assert_eq!(std::path::Path::new(&filename).components().count(), 1);
+            assert!(filename.ends_with("-relaypost-card.json"));
+        }
+    }
+
+    #[test]
+    fn same_named_computers_have_distinct_card_defaults() {
+        let alice = connection_card_filename("My Mac", &"a".repeat(64));
+        let bob = connection_card_filename("My Mac", &"b".repeat(64));
+        assert_ne!(alice, bob);
     }
 }
