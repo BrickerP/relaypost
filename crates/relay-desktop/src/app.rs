@@ -1870,12 +1870,12 @@ impl RelayApp {
                     });
                     if retryable {
                         retry_offered = true;
-                        if primary(ui, "Retry direct transfer", true).clicked() {
-                            if self.direct_command(DirectCommand::Retry {
+                        if primary(ui, "Retry direct transfer", true).clicked()
+                            && self.direct_command(DirectCommand::Retry {
                                 parcel_id: record.parcel_id.clone(),
-                            }) {
-                                self.queued_sends.insert(record.parcel_id.clone());
-                            }
+                            })
+                        {
+                            self.queued_sends.insert(record.parcel_id.clone());
                         }
                     }
                 }
