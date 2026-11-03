@@ -2782,7 +2782,7 @@ fn draw_record(ui: &mut Ui, record: &ParcelRecord) {
         DeliveryState::Confirmed => Some(3),
         _ => None,
     };
-    if let Some(stage) = stage {
+    if let Some(stage) = stage.filter(|_| record.direction == Direction::Outgoing) {
         handoff_ribbon(ui, stage);
     }
     ui.label(format!(
