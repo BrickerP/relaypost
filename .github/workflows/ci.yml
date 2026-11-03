@@ -235,7 +235,13 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python3 scripts/package-gui-qa.py "dist/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64/RelayPost.app" "$RUNNER_TEMP/relaypost-gui-qa" 2>&1 | tee ci-logs/gui-qa-package.log
+          qa_binaries="$RUNNER_TEMP/relaypost-gui-binaries"
+          for role in sender receiver; do
+            cargo rustc --locked -p relay-desktop --bin relay-desktop --release -- "-Cmetadata=relaypost_qa_${role}_${RELAYPOST_SOURCE_SHA}" 2>&1 | tee "ci-logs/gui-qa-$role-build.log"
+            mkdir -p "$qa_binaries/$role"
+            cp target/release/relay-desktop "$qa_binaries/$role/relay-desktop"
+          done
+          python3 scripts/package-gui-qa.py "dist/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64/RelayPost.app" "$RUNNER_TEMP/relaypost-gui-qa" "$qa_binaries" 2>&1 | tee ci-logs/gui-qa-package.log
       - uses: actions/upload-artifact@v4
         with:
           name: gui-qa-macos-arm64

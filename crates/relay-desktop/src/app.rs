@@ -1670,9 +1670,9 @@ impl RelayApp {
             }
             ServiceState::Ready => {
                 ui.label(
-                    RichText::new("Local network available")
+                    RichText::new("Nearby discovery is on")
                         .small()
-                        .color(GREEN),
+                        .color(MUTED),
                 );
             }
             ServiceState::Unavailable { message, .. } => {

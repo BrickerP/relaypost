@@ -140,6 +140,14 @@ Loopback does not prove physical two-device Wi-Fi discovery. GUI acceptance
 and actual two-device evidence are recorded separately. Source must pass
 remote formatting, tests, Clippy and exact-source packaging before release.
 
+Same-host GUI QA uses independently linked programs from the same source and
+dependency lock, with distinct rustc metadata salts, main executable UUIDs and
+bundle identifiers. The manifest records each identity and signed binary hash.
+Copying one executable and only changing bundle names/identifiers is not a
+valid independent local-network privacy setup; Apple documents UUID collisions
+in [TN3178](https://developer.apple.com/documentation/technotes/tn3178-checking-for-and-resolving-build-uuid-problems).
+These QA apps are not the public release distribution.
+
 macOS bundles explain local-network use with
 `NSLocalNetworkUsageDescription` and declare `_relaypost._tcp` in
 `NSBonjourServices`. The macOS app is not sandboxed; do not add unrelated
