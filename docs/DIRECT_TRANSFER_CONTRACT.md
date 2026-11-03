@@ -76,6 +76,13 @@ shutdown waits for daemon/listener completion rather than relying on Drop.
 Upstream references: [API](https://docs.rs/mdns-sd/0.21.7/mdns_sd/),
 [source and changelog](https://github.com/keepsimple1/mdns-sd).
 
+Read-only diagnostics distinguish search, discovery, resolution, announcement
+and Card probing. This computer / Advanced exposes only bounded counters and
+at most 32 in-memory network events of 1024 characters each. Capture only own
+service lifecycle or whitelisted socket/I/O failures; exclude DNS packet/TXT
+dumps, unrelated services, cards, passwords, paths and file/application payloads.
+Diagnostics do not change trust, transfer authority or operating-system access.
+
 Pairing exchanges public cards and queues a request for the other user. Accept
 imports an unverified identity. Each user separately compares every group of
 the complete safety code and explicitly grants local trust through the core.
