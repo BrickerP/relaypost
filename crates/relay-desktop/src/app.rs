@@ -13,7 +13,6 @@ use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Screen {
-    Home,
     Send,
     Receive,
     Activity,
@@ -37,7 +36,6 @@ pub struct RelayApp {
     profile: Profile,
     home: PathBuf,
     screen: Screen,
-    loaded: bool,
     identity: Option<PeerCard>,
     identity_error: Option<String>,
     identity_missing: bool,
@@ -81,8 +79,7 @@ impl RelayApp {
         let mut app = Self {
             profile,
             home,
-            screen: Screen::Home,
-            loaded: false,
+            screen: Screen::Send,
             identity: None,
             identity_error: None,
             identity_missing: false,
@@ -198,24 +195,20 @@ impl RelayApp {
                         .map(|card| format!("RelayPost — {}", card.name))
                         .unwrap_or_else(|| "RelayPost".to_owned());
                     context.send_viewport_cmd(egui::ViewportCommand::Title(title));
-                    if !self.loaded {
-                        self.screen = Screen::Home;
-                        self.loaded = true;
-                    }
                 }
                 match completed.payload {
                     Payload::None => {}
-                    Payload::Initialized => self.screen = Screen::People,
+                    Payload::Initialized => self.screen = Screen::Send,
                     Payload::ContactImported(contact) => {
                         if contact.verified {
-                            self.screen = self.after_pairing.take().unwrap_or(Screen::Home);
+                            self.screen = self.after_pairing.take().unwrap_or(Screen::Send);
                         } else {
                             self.trust_contact = Some(*contact);
                             self.trust_fingerprint.clear();
                         }
                     }
                     Payload::Trusted => {
-                        self.screen = self.after_pairing.take().unwrap_or(Screen::Home);
+                        self.screen = self.after_pairing.take().unwrap_or(Screen::Send);
                     }
                     Payload::ParcelExported => {}
                     Payload::ReceiptExported(id) => {
@@ -310,10 +303,9 @@ impl RelayApp {
                 );
                 ui.add_space(36.0);
                 for (screen, label) in [
-                    (Screen::Home, "Home"),
                     (Screen::Send, "Send files"),
                     (Screen::Receive, "Receive files"),
-                    (Screen::Activity, "Activity"),
+                    (Screen::Activity, "Transfers"),
                     (Screen::People, "People"),
                 ] {
                     let selected = self.screen == screen;
@@ -770,7 +762,7 @@ impl RelayApp {
                         .color(RED),
                     );
                     ui.label("The earlier saved content could not be verified. Review local records before returning a confirmation.");
-                    if primary(ui, "Review in Activity", true).clicked() {
+                    if primary(ui, "Review in Transfers", true).clicked() {
                         self.selected_delivery =
                             Some((result.record.parcel_id.clone(), Direction::Incoming));
                         self.switch_screen(Screen::Activity);
@@ -917,9 +909,32 @@ impl RelayApp {
     }
 
     fn activity_screen(&mut self, ui: &mut Ui) {
+        if self.selected_delivery.is_none() {
+            self.selected_delivery = self
+                .deliveries
+                .iter()
+                .rev()
+                .min_by_key(|record| {
+                    if record.local_error.is_some() || record.state == DeliveryState::Failed {
+                        0
+                    } else {
+                        match (&record.direction, &record.state) {
+                            (Direction::Outgoing, DeliveryState::Ready) => 1,
+                            (Direction::Incoming, DeliveryState::SavedReceiptReady)
+                                if !self.receipt_exported.contains(&record.parcel_id) =>
+                            {
+                                2
+                            }
+                            (Direction::Outgoing, DeliveryState::WaitingReceipt) => 3,
+                            _ => 4,
+                        }
+                    }
+                })
+                .map(|record| (record.parcel_id.clone(), record.direction.clone()));
+        }
         page_title(
             ui,
-            "Activity",
+            "Transfers",
             "See what is ready, what needs carrying, and what is confirmed.",
         );
         let waiting_for_confirmation = self.deliveries.iter().any(|record| {
@@ -1219,7 +1234,7 @@ impl RelayApp {
                 if self.contacts.iter().any(|c| c.verified)
                     && primary(ui, "Continue to files", true).clicked()
                 {
-                    let target = self.after_pairing.take().unwrap_or(Screen::Home);
+                    let target = self.after_pairing.take().unwrap_or(Screen::Send);
                     self.switch_screen(target);
                 }
             });
@@ -1233,189 +1248,6 @@ impl RelayApp {
             value(ui,"RelayPost data on this computer",&self.home.display().to_string());
             ui.label("To use this exact storage with the CLI, pass --home followed by this directory. Keep a safe backup; it contains the password-protected private identity.");
         });
-    }
-
-    fn home_screen(&mut self, ui: &mut Ui) {
-        page_title(
-            ui,
-            "Files delivered. Even offline.",
-            "Prepare here. Carry by drive. Know when the other computer saved your files.",
-        );
-        surface(ui, |ui| {
-            section_label(ui, "NEXT STEP");
-            if let Some(record) = self
-                .deliveries
-                .iter()
-                .find(|record| {
-                    record.local_error.is_some() || record.state == DeliveryState::Failed
-                })
-                .cloned()
-            {
-                ui.label(
-                    RichText::new("A local copy needs attention")
-                        .font(display_font(25.0))
-                        .color(RED),
-                );
-                ui.label(if record.state == DeliveryState::Confirmed { "The delivery remains confirmed, but the stored copy on this computer needs a check." } else { "Review the affected handoff before copying files or returning a confirmation." });
-                ui.add_space(16.0);
-                if primary(ui, "Review in Activity", true).clicked() {
-                    self.selected_delivery =
-                        Some((record.parcel_id.clone(), record.direction.clone()));
-                    self.switch_screen(Screen::Activity);
-                }
-            } else if self.identity.is_none() {
-                ui.label(RichText::new("Make this computer yours").font(display_font(25.0)));
-                ui.label("Start with a name and password. Then connect the computer you exchange files with.");
-                ui.add_space(20.0);
-                if primary(ui, "Set up this computer", true).clicked() {
-                    self.connect_for(Screen::Home);
-                }
-                ui.label(
-                    RichText::new("No cloud account. Your files stay between the two computers.")
-                        .small()
-                        .color(MUTED),
-                );
-            } else if !self.contacts.iter().any(|c| c.verified) {
-                ui.label(RichText::new("Connect the other computer").font(display_font(25.0)));
-                ui.label("Exchange connection cards once and compare the complete safety codes together.");
-                ui.add_space(20.0);
-                if primary(ui, "Connect another computer", true).clicked() {
-                    self.connect_for(Screen::Home);
-                }
-            } else if let Some(record) = self
-                .deliveries
-                .iter()
-                .find(|r| r.direction == Direction::Outgoing && r.state == DeliveryState::Ready)
-                .cloned()
-            {
-                ui.label(
-                    RichText::new(format!(
-                        "Your transfer to {} is ready",
-                        self.other_name(&record)
-                    ))
-                    .font(display_font(23.0)),
-                );
-                ui.label(format!(
-                    "{} · {} · choose a drive to carry this protected copy.",
-                    file_count(record.files),
-                    bytes(record.total_bytes)
-                ));
-                ui.add_space(16.0);
-                if primary(ui, "Copy prepared files to a drive…", true).clicked() {
-                    self.choose_parcel_export(ui.ctx(), &record.parcel_id);
-                }
-            } else if let Some(record) = self
-                .deliveries
-                .iter()
-                .find(|r| {
-                    r.direction == Direction::Incoming
-                        && r.state == DeliveryState::SavedReceiptReady
-                        && !self.receipt_exported.contains(&r.parcel_id)
-                })
-                .cloned()
-            {
-                ui.label(
-                    RichText::new(format!(
-                        "Let {} know the files arrived",
-                        self.other_name(&record)
-                    ))
-                    .font(display_font(23.0)),
-                );
-                ui.label("The files are saved here. Put their confirmation on the drive and carry it back.");
-                ui.add_space(16.0);
-                if primary(ui, "Put confirmation on the drive…", true).clicked() {
-                    self.choose_receipt_export(ui.ctx(), &record.parcel_id);
-                }
-            } else if let Some(record) = self
-                .deliveries
-                .iter()
-                .find(|r| {
-                    r.direction == Direction::Outgoing && r.state == DeliveryState::WaitingReceipt
-                })
-                .cloned()
-            {
-                ui.label(
-                    RichText::new(format!(
-                        "Waiting for {}'s confirmation",
-                        self.other_name(&record)
-                    ))
-                    .font(display_font(23.0)),
-                );
-                ui.label("Copied to a drive. When the drive comes back, add its confirmation to finish the handoff.");
-                ui.add_space(16.0);
-                if primary(ui, "Add confirmation from returned drive…", true).clicked() {
-                    self.import_confirmation(ui.ctx());
-                }
-            } else {
-                ui.label(RichText::new("Ready for your next handoff").font(display_font(25.0)));
-                ui.label("Send a protected copy, or bring files from a drive onto this computer.");
-                ui.add_space(20.0);
-                ui.horizontal_wrapped(|ui| {
-                    if primary(ui, "Send files", true).clicked() {
-                        self.switch_screen(Screen::Send);
-                    }
-                    if ui.button("Receive files").clicked() {
-                        self.switch_screen(Screen::Receive);
-                    }
-                });
-            }
-        });
-        ui.add_space(24.0);
-        ui.columns(2, |columns| {
-            surface(&mut columns[0], |ui| {
-                ui.label(RichText::new("Send files").font(display_font(22.0)));
-                ui.label("Prepare a protected copy for someone else.");
-                ui.add_space(12.0);
-                if ui.button("Start sending").clicked() {
-                    self.switch_screen(Screen::Send);
-                }
-            });
-            surface(&mut columns[1], |ui| {
-                ui.label(RichText::new("Receive files").font(display_font(22.0)));
-                ui.label("Check and save a transfer from a drive.");
-                ui.add_space(12.0);
-                if ui.button("Start receiving").clicked() {
-                    self.switch_screen(Screen::Receive);
-                }
-            });
-        });
-        if !self.deliveries.is_empty() {
-            ui.add_space(24.0);
-            section_label(ui, "RECENT HANDOFFS");
-            for record in self.deliveries.clone().iter().rev().take(3) {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(format!(
-                        "{} {} · {}",
-                        if record.direction == Direction::Outgoing {
-                            "To"
-                        } else {
-                            "From"
-                        },
-                        self.other_name(record),
-                        file_count(record.files)
-                    ));
-                    state_badge(ui, &record.state);
-                    if ui.small_button("View").clicked() {
-                        self.selected_delivery =
-                            Some((record.parcel_id.clone(), record.direction.clone()));
-                        self.switch_screen(Screen::Activity);
-                    }
-                });
-            }
-        }
-        ui.add_space(24.0);
-        if ui
-            .link("New to RelayPost? Try the guided walkthrough")
-            .clicked()
-        {
-            let ctx = ui.ctx().clone();
-            self.start_demo(&ctx);
-        }
-        ui.label(
-            RichText::new("The walkthrough uses sample files and separate test computers.")
-                .small()
-                .color(MUTED),
-        );
     }
 
     fn start_demo(&mut self, context: &egui::Context) {
@@ -1918,11 +1750,10 @@ impl RelayApp {
             self.receipt_candidates.clear();
         }
         for (key, screen) in [
-            (egui::Key::Num1, Screen::Home),
-            (egui::Key::Num2, Screen::Send),
-            (egui::Key::Num3, Screen::Receive),
-            (egui::Key::Num4, Screen::Activity),
-            (egui::Key::Num5, Screen::People),
+            (egui::Key::Num1, Screen::Send),
+            (egui::Key::Num2, Screen::Receive),
+            (egui::Key::Num3, Screen::Activity),
+            (egui::Key::Num4, Screen::People),
         ] {
             if context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, key)) {
                 self.switch_screen(screen);
@@ -1985,7 +1816,6 @@ impl eframe::App for RelayApp {
                         self.messages(ui);
                         ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| {
                             match self.screen {
-                                Screen::Home => self.home_screen(ui),
                                 Screen::Send => self.send_screen(ui),
                                 Screen::Receive => self.receive_screen(ui),
                                 Screen::Activity => self.activity_screen(ui),
@@ -2154,7 +1984,7 @@ fn friendly_error(error: &str) -> &'static str {
     } else if error.contains("found") || error.contains("directory") || error.contains("folder") {
         "Choose the drive or folder that contains the RelayPost transfer or confirmation. Check that the drive is still connected."
     } else {
-        "Review the details below before retrying. If this happened during a save, Activity can verify and recover local records."
+        "Review the details below before retrying. If this happened during a save, Transfers can verify and recover local records."
     }
 }
 
