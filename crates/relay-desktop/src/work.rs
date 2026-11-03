@@ -234,7 +234,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let notice = if result.duplicate {
                 "These files were already saved. RelayPost checked them again."
             } else {
-                "Files saved and checked. Send the confirmation back to the sender."
+                "Files saved and checked."
             };
             (notice.to_owned(), Payload::Received(Box::new(result)))
         }

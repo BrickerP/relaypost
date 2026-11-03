@@ -2897,7 +2897,7 @@ fn state_badge(ui: &mut Ui, state: &DeliveryState) {
 
 fn state_description(state: &DeliveryState) -> &'static str {
     match state {
-        DeliveryState::Ready => "The protected files are prepared here. Choose how to deliver them.",
+        DeliveryState::Ready => "This protected copy is prepared on this computer. Delivery is confirmed only after the recipient saves and confirms it.",
         DeliveryState::WaitingReceipt => {
             "A delivery copy was created. The recipient has not confirmed saving the files yet."
         }
