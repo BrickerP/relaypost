@@ -1787,6 +1787,15 @@ impl RelayApp {
             });
             ui.add_space(16.0);
             ui.collapsing("Advanced", |ui| {
+                ui.collapsing("Network details", |ui| {
+                    let diagnostics = self.direct.diagnostics();
+                    egui::ScrollArea::vertical()
+                        .id_salt("network_diagnostics")
+                        .max_height(240.0)
+                        .show(ui, |ui| {
+                            value(ui, "", &format!("{diagnostics:#?}"));
+                        });
+                });
                 value(ui, "Encryption public key", &card.age_recipient);
                 value(ui, "Signing public key", &card.signing_public_key);
                 value(ui, "RelayPost data on this computer", &self.home.display().to_string());
