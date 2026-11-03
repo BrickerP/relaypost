@@ -141,6 +141,14 @@ the core. Sender restart resumes receipt polling from WaitingReceipt plus the
 pinned recipient fingerprint; receiver restart discovers managed staged
 packages. No second durable transfer state machine is added.
 
+Restoring `WaitingReceipt` alone does not prove a direct transfer reached the
+recipient: an offline export creates that core phase too. Receipt-only restored
+tracking uses transport-neutral WaitingForConfirmation; only an actual direct
+stage ACK permits WaitingForSave. In the current UI session an explicit package
+export shows its real destination and manual handoff/receipt actions, ahead of
+derived network tracking. A successfully admitted explicit direct send can
+switch that view; only a verified receipt confirms either delivery method.
+
 ## Verification and platform limits
 
 Core tests cover untrusted/wrong-recipient/tampered offers, unsafe tar entries,
