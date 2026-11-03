@@ -106,14 +106,20 @@ pub struct IncomingOffer {
 pub enum OutgoingTransferState {
     Offering,
     WaitingForRecipient,
-    Sending { sent: u64, total: u64 },
+    Sending {
+        sent: u64,
+        total: u64,
+    },
     WaitingForSave,
     /// A persisted WaitingReceipt record does not reveal its carrier or prove
     /// that a remote computer has already received the encrypted package.
     WaitingForConfirmation,
     Confirmed,
     Declined,
-    Failed { message: String, retryable: bool },
+    Failed {
+        message: String,
+        retryable: bool,
+    },
 }
 
 #[derive(Clone, Debug)]

@@ -2039,7 +2039,12 @@ mod tests {
             "Staging encrypted bytes is not a saved delivery"
         );
         assert!(bob.receipt_artifact(&parcel.parcel_id).is_err());
-        wait_until(|| a.snapshot().outgoing.iter().any(|transfer| transfer.parcel_id == parcel.parcel_id && matches!(transfer.state, OutgoingTransferState::WaitingForSave)));
+        wait_until(|| {
+            a.snapshot().outgoing.iter().any(|transfer| {
+                transfer.parcel_id == parcel.parcel_id
+                    && matches!(transfer.state, OutgoingTransferState::WaitingForSave)
+            })
+        });
         let staged = bob.direct_offers().unwrap().pop().unwrap();
         let saved = bob.receive_parcel(&staged.parcel_path, PASSWORD).unwrap();
         assert_eq!(saved.record.state, DeliveryState::SavedReceiptReady);
@@ -2389,8 +2394,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let alice = Profile::open(root.path().join("alice")).unwrap();
         let bob = Profile::open(root.path().join("bob")).unwrap();
-        let ac = alice.initialize("Synthetic offline sender", PASSWORD).unwrap();
-        let bc = bob.initialize("Synthetic offline receiver", PASSWORD).unwrap();
+        let ac = alice
+            .initialize("Synthetic offline sender", PASSWORD)
+            .unwrap();
+        let bc = bob
+            .initialize("Synthetic offline receiver", PASSWORD)
+            .unwrap();
         alice.import_contact_card(&bc).unwrap();
         alice.trust_contact(&bc.fingerprint).unwrap();
         bob.import_contact_card(&ac).unwrap();
@@ -2398,28 +2407,53 @@ mod tests {
         let a = node(&alice);
         let b = node(&bob);
         let source = root.path().join("offline.txt");
-        fs::write(&source, b"only a protected carrier copy, not a network delivery").unwrap();
-        let parcel = alice.seal(std::slice::from_ref(&source), &bc.fingerprint, PASSWORD).unwrap();
+        fs::write(
+            &source,
+            b"only a protected carrier copy, not a network delivery",
+        )
+        .unwrap();
+        let parcel = alice
+            .seal(std::slice::from_ref(&source), &bc.fingerprint, PASSWORD)
+            .unwrap();
         let carrier = root.path().join("offline-drive");
         fs::create_dir(&carrier).unwrap();
         let package = alice.export_parcel(&parcel.parcel_id, &carrier).unwrap();
         assert!(package.is_dir());
         a.command(DirectCommand::ReloadProfile).unwrap();
-        wait_until(|| a.snapshot().outgoing.iter().any(|transfer| transfer.parcel_id == parcel.parcel_id && matches!(transfer.state, OutgoingTransferState::WaitingForConfirmation)));
-        assert!(!a.snapshot().outgoing.iter().any(|transfer| matches!(transfer.state, OutgoingTransferState::WaitingForSave)));
+        wait_until(|| {
+            a.snapshot().outgoing.iter().any(|transfer| {
+                transfer.parcel_id == parcel.parcel_id
+                    && matches!(
+                        transfer.state,
+                        OutgoingTransferState::WaitingForConfirmation
+                    )
+            })
+        });
+        assert!(!a
+            .snapshot()
+            .outgoing
+            .iter()
+            .any(|transfer| matches!(transfer.state, OutgoingTransferState::WaitingForSave)));
         assert!(b.snapshot().incoming.is_empty());
         assert!(bob.direct_offers().unwrap().is_empty());
         assert!(bob.deliveries().unwrap().is_empty());
         assert!(bob.receipt_artifact(&parcel.parcel_id).is_err());
-        assert_eq!(alice.deliveries().unwrap()[0].state, DeliveryState::WaitingReceipt);
+        assert_eq!(
+            alice.deliveries().unwrap()[0].state,
+            DeliveryState::WaitingReceipt
+        );
         // Later, carrying and explicitly saving that package still uses the
         // same signed-receipt authority. Generic tracking must keep polling.
         bob.receive_parcel(&package, PASSWORD).unwrap();
         discover(&a, &b, &bc.fingerprint);
         wait_until(|| alice.deliveries().unwrap()[0].state == DeliveryState::Confirmed);
-        wait_until(|| a.snapshot().outgoing.iter().any(|transfer| transfer.parcel_id == parcel.parcel_id && matches!(transfer.state, OutgoingTransferState::Confirmed)));
+        wait_until(|| {
+            a.snapshot().outgoing.iter().any(|transfer| {
+                transfer.parcel_id == parcel.parcel_id
+                    && matches!(transfer.state, OutgoingTransferState::Confirmed)
+            })
+        });
         a.shutdown().unwrap();
         b.shutdown().unwrap();
     }
-
 }

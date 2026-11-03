@@ -378,14 +378,15 @@ impl RelayApp {
 
     fn direct_command(&mut self, command: DirectCommand) -> bool {
         let clear_feedback = !matches!(&command, DirectCommand::ReloadProfile);
-        let switches_from_package = self.last_export.as_ref().is_some_and(|(saved_id, _)| {
-            match &command {
-                DirectCommand::Send { parcel_id, .. } | DirectCommand::Retry { parcel_id } => {
-                    parcel_id == saved_id
-                }
-                _ => false,
-            }
-        });
+        let switches_from_package =
+            self.last_export
+                .as_ref()
+                .is_some_and(|(saved_id, _)| match &command {
+                    DirectCommand::Send { parcel_id, .. } | DirectCommand::Retry { parcel_id } => {
+                        parcel_id == saved_id
+                    }
+                    _ => false,
+                });
         match self.direct.command(command) {
             Ok(()) => {
                 if switches_from_package {
@@ -1876,10 +1877,17 @@ impl RelayApp {
             );
             return;
         }
-        let package = self.last_export.as_ref().filter(|(id, _)| id == &record.parcel_id);
+        let package = self
+            .last_export
+            .as_ref()
+            .filter(|(id, _)| id == &record.parcel_id);
         let package_choice = package.is_some();
         if let Some((_, path)) = package {
-            value(ui, "Encrypted package saved to", &path.display().to_string());
+            value(
+                ui,
+                "Encrypted package saved to",
+                &path.display().to_string(),
+            );
         }
         if record.state == DeliveryState::Cancelled
             || record.state == DeliveryState::Failed
