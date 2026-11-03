@@ -216,7 +216,7 @@ impl RelayApp {
                     Payload::None => {}
                     Payload::Initialized => {
                         self.computer_open = false;
-                        self.screen = Screen::Send;
+                        self.screen = self.recipient_return.take().unwrap_or(Screen::Send);
                     }
                     Payload::CardExported => {
                         if matches!(self.card_step, Some(CardStep::ShareCard)) {
@@ -365,7 +365,7 @@ impl RelayApp {
                     .wrap()
                     .min_size(egui::vec2(ui.available_width(), 52.0)),
                 ).clicked() {
-                    self.computer_open = true;
+                    self.open_computer();
                 }
                 ui.add_space(16.0);
                 if ui
@@ -408,9 +408,16 @@ impl RelayApp {
         })
     }
 
+    fn open_computer(&mut self) {
+        if self.identity.is_none() {
+            self.recipient_return = Some(self.screen);
+        }
+        self.computer_open = true;
+    }
+
     fn add_recipient_for(&mut self, destination: Screen) {
         if self.identity.is_none() {
-            self.computer_open = true;
+            self.open_computer();
             return;
         }
         self.recipient_return = Some(destination);
@@ -532,7 +539,7 @@ impl RelayApp {
                 ui.label("Give this computer a name and a password. No online account is needed.");
                 ui.add_space(16.0);
                 if primary(ui, "Set up this computer", true).clicked() {
-                    self.computer_open = true;
+                    self.open_computer();
                 }
             });
             return;
@@ -799,7 +806,7 @@ impl RelayApp {
                 ui.label(RichText::new("Set up this computer first").font(display_font(22.0)));
                 ui.label("The sender needs this computer's public identity card before preparing files for you.");
                 if primary(ui, "Set up this computer", true).clicked() {
-                    self.computer_open = true;
+                    self.open_computer();
                 }
             });
             return;
