@@ -1005,14 +1005,12 @@ impl RelayApp {
         let recipients: Vec<_> = self
             .contacts
             .iter()
-            .filter(|contact| {
-                contact.verified && contact.card.fingerprint != identity.fingerprint
-            })
+            .filter(|contact| contact.verified && contact.card.fingerprint != identity.fingerprint)
             .collect();
         let showing_transfer = self.sealed_id.as_ref().is_some_and(|id| {
-            self.deliveries.iter().any(|record| {
-                record.parcel_id == *id && record.direction == Direction::Outgoing
-            })
+            self.deliveries
+                .iter()
+                .any(|record| record.parcel_id == *id && record.direction == Direction::Outgoing)
         });
         if recipients.is_empty() || showing_transfer {
             return;
