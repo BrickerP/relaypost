@@ -766,8 +766,8 @@ impl RelayApp {
                         } else {
                             "Saved files need attention"
                         })
-                            .font(display_font(24.0))
-                            .color(RED),
+                        .font(display_font(24.0))
+                        .color(RED),
                     );
                     ui.label("The earlier saved content could not be verified. Review local records before returning a confirmation.");
                     if primary(ui, "Review in Activity", true).clicked() {
@@ -786,8 +786,8 @@ impl RelayApp {
                     } else {
                         "Files saved on this computer"
                     })
-                        .font(display_font(25.0))
-                        .color(GREEN),
+                    .font(display_font(25.0))
+                    .color(GREEN),
                 );
                 ui.label(format!(
                     "From {name} · {} verified byte for byte",
