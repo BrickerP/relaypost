@@ -19,6 +19,9 @@ const MAX_OFFERS: usize = 8;
 const MAX_CONNECTIONS: usize = 4;
 const MAX_BUNDLES: usize = 2;
 const MAX_JOBS: usize = 4;
+const PROBE_RETRY: Duration = Duration::from_secs(2);
+const PROBE_REFRESH: Duration = Duration::from_secs(10);
+const CANDIDATE_TTL: Duration = Duration::from_secs(120);
 static SESSION_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 fn session_id() -> String {
@@ -47,6 +50,13 @@ struct Endpoint {
     seen: Instant,
     verified: bool,
 }
+#[derive(Clone)]
+struct Candidate {
+    addresses: Vec<SocketAddrV4>,
+    seen: Instant,
+    next_probe: Instant,
+}
+
 struct PairEntry {
     card: relay_core::PeerCard,
     decision: Decision,
@@ -62,6 +72,7 @@ struct OfferEntry {
 struct State {
     snapshot: DirectSnapshot,
     peers: HashMap<PeerId, Endpoint>,
+    candidates: HashMap<String, Candidate>,
     pairs: HashMap<String, PairEntry>,
     offers: HashMap<String, OfferEntry>,
     jobs: HashSet<String>,
@@ -260,6 +271,7 @@ impl DirectHandle {
             state: Mutex::new(State {
                 snapshot,
                 peers: HashMap::new(),
+                candidates: HashMap::new(),
                 pairs: HashMap::new(),
                 offers: HashMap::new(),
                 jobs: HashSet::new(),
@@ -396,6 +408,7 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
     let mut listener: Option<TcpListener> = None;
     let mut discovery: Option<Discovery> = None;
     let mut last_refresh = Instant::now() - Duration::from_secs(30);
+    let mut last_probe_retry = Instant::now() - PROBE_RETRY;
     let mut last_receipts = Instant::now();
     let mut restart = true;
     while !shared.stopped.load(Ordering::Acquire) {
@@ -504,19 +517,17 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
             for event in discovery.drain() {
                 match event {
                     Event::Resolved { service, addresses } => probe(&shared, service, addresses),
-                    Event::Removed(service) => {
-                        shared.edit(|s| s.peers.retain(|_, p| p.service != service))
-                    }
+                    Event::Removed(service) => forget_candidate(&shared, &service),
                     Event::Error(error) => discovery_error(&shared, error),
                 }
             }
         }
+        if last_probe_retry.elapsed() >= PROBE_RETRY {
+            last_probe_retry = Instant::now();
+            retry_candidates(&shared);
+        }
         if last_refresh.elapsed() >= Duration::from_secs(10) {
             last_refresh = Instant::now();
-            let endpoints: Vec<_> = lock(&shared.state).peers.values().cloned().collect();
-            for peer in endpoints {
-                probe(&shared, peer.service, peer.addresses);
-            }
             shared.edit(|s| {
                 s.peers
                     .retain(|_, peer| peer.seen.elapsed() < Duration::from_secs(35));
@@ -677,47 +688,157 @@ fn restore_profile(shared: &Arc<Shared>) {
     });
 }
 
-fn probe(shared: &Arc<Shared>, service: String, addresses: Vec<SocketAddrV4>) {
-    let key = format!("probe:{service}");
-    shared.start_job(key, move |shared| {
-        let own = match shared.profile.public_card() {
-            Ok(card) => card,
-            Err(_) => return,
-        };
-        for address in &addresses {
-            if shared.stopped.load(Ordering::Acquire) {
+fn forget_candidate(shared: &Shared, service: &str) {
+    shared.edit(|state| {
+        state.candidates.remove(service);
+        state.peers.retain(|_, peer| peer.service != service);
+    });
+}
+
+fn candidate_current(state: &State, service: &str, addresses: &[SocketAddrV4]) -> bool {
+    state.candidates.get(service).is_some_and(|candidate|
+        candidate.addresses == addresses && candidate.seen.elapsed() < CANDIDATE_TTL)
+}
+
+fn probe(shared: &Arc<Shared>, service: String, mut addresses: Vec<SocketAddrV4>) {
+    addresses.retain(|address| wire::is_local(*address.ip()));
+    addresses.sort();
+    addresses.dedup();
+    addresses.truncate(8);
+    if addresses.is_empty() {
+        forget_candidate(shared, &service);
+        return;
+    }
+    {
+        let mut state = lock(&shared.state);
+        let now = Instant::now();
+        if let Some(candidate) = state.candidates.get_mut(&service) {
+            if candidate.addresses != addresses {
+                candidate.addresses = addresses;
+                candidate.next_probe = now;
+            }
+            candidate.seen = now;
+        } else {
+            if state.candidates.len() >= MAX_PEERS {
+                // Keep the latest unresolved announcements without allowing
+                // untrusted discovery churn to evict a healthy checked peer.
+                let oldest = state.candidates.iter().filter(|(service, _)|
+                    !state.peers.values().any(|peer| &peer.service == *service))
+                    .min_by_key(|(_, candidate)| candidate.seen).map(|(service, _)| service.clone());
+                if let Some(oldest) = oldest { state.candidates.remove(&oldest); }
+            }
+            if state.candidates.len() < MAX_PEERS {
+                state.candidates.insert(service, Candidate { addresses, seen: now, next_probe: now });
+            }
+        }
+    }
+    retry_candidates(shared);
+}
+
+fn retry_candidates(shared: &Arc<Shared>) {
+    let due = {
+        let mut state = lock(&shared.state);
+        state.candidates.retain(|_, candidate| candidate.seen.elapsed() < CANDIDATE_TTL);
+        let expired_peers = state.peers.values().any(|peer| !state.candidates.contains_key(&peer.service));
+        let now = Instant::now();
+        let mut due: Vec<_> = state.candidates.iter().filter_map(|(service, candidate)| {
+            if candidate.next_probe > now { return None; }
+            Some((candidate.next_probe, service.clone(), candidate.addresses.clone()))
+        }).collect();
+        // A failed or busy first batch must not repeatedly win HashMap order.
+        // Candidates that have never obtained a worker retain the oldest due time.
+        due.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        drop(state);
+        if expired_peers {
+            shared.edit(|state| {
+                let live: HashSet<_> = state.candidates.keys().cloned().collect();
+                state.peers.retain(|_, peer| live.contains(&peer.service));
+            });
+        }
+        due
+    };
+    for (due_at, service, addresses) in due {
+        let key = format!("probe:{service}");
+        let next_probe = Instant::now() + PROBE_RETRY;
+        {
+            let mut state = lock(&shared.state);
+            if state.jobs.len() >= MAX_JOBS { break; }
+            if state.jobs.contains(&key) || !candidate_current(&state, &service, &addresses) { continue; }
+            if let Some(candidate) = state.candidates.get_mut(&service) { candidate.next_probe = next_probe; }
+        }
+        let attempted_service = service.clone();
+        let attempted_addresses = addresses.clone();
+        let started = shared.start_job(key, move |shared| {
+            let own = match shared.profile.public_card() {
+                Ok(card) => card,
+                Err(_) => return,
+            };
+            // Retain the latest resolved address set, but probe a previously
+            // successful endpoint first when it is still advertised. Slow stale
+            // addresses must not consume the healthy peer's entire lease.
+            let previous = lock(&shared.state).peers.values().find(|peer| peer.service == service)
+                .map(|peer| (peer.card.fingerprint.clone(), peer.addresses.first().copied()));
+            let mut ordered_addresses = addresses.clone();
+            if let Some((_, Some(address))) = &previous {
+                if let Some(index) = ordered_addresses.iter().position(|candidate| candidate == address) {
+                    ordered_addresses.swap(0, index);
+                }
+            }
+            let mut saw_own = false;
+            for address in &ordered_addresses {
+                if shared.stopped.load(Ordering::Acquire) ||
+                    !candidate_current(&lock(&shared.state), &service, &addresses) { return; }
+                let Ok(Reply::Card { card }) = shared.rpc(*address, Kind::Card, &Empty {}) else { continue; };
+                if !candidate_current(&lock(&shared.state), &service, &addresses) { return; }
+                if card.fingerprint == own.fingerprint {
+                    saw_own = true;
+                    continue;
+                }
+                if previous.as_ref().is_some_and(|(fingerprint, _)| fingerprint != &card.fingerprint) {
+                    continue;
+                }
+                let Ok(contact) = shared.profile.inspect_contact_card(&card) else { continue; };
+                let id = PeerId(card.fingerprint.clone());
+                let mut ordered = vec![*address];
+                ordered.extend(addresses.iter().filter(|a| *a != address).copied());
+                shared.edit(|state| {
+                    if !candidate_current(state, &service, &addresses) { return; }
+                    if state.peers.len() < MAX_PEERS || state.peers.contains_key(&id) {
+                        state.snapshot.service = ServiceState::Ready;
+                        state.peers.insert(id.clone(), Endpoint {
+                            card: contact.card, verified: contact.verified,
+                            addresses: ordered, service: service.clone(), seen: Instant::now(),
+                        });
+                        if let Some(candidate) = state.candidates.get_mut(&service) {
+                            candidate.seen = Instant::now();
+                            candidate.next_probe = Instant::now() + PROBE_REFRESH;
+                        }
+                    }
+                });
                 return;
             }
-            let Ok(Reply::Card { card }) = shared.rpc(*address, Kind::Card, &Empty {}) else {
-                continue;
-            };
-            if card.fingerprint == own.fingerprint {
-                continue;
-            }
-            let Ok(contact) = shared.profile.inspect_contact_card(&card) else {
-                continue;
-            };
-            let id = PeerId(card.fingerprint.clone());
-            let mut ordered = vec![*address];
-            ordered.extend(addresses.iter().filter(|a| *a != address).copied());
-            shared.edit(|state| {
-                if state.peers.len() < MAX_PEERS || state.peers.contains_key(&id) {
-                    state.snapshot.service = ServiceState::Ready;
-                    state.peers.insert(
-                        id.clone(),
-                        Endpoint {
-                            card: contact.card,
-                            verified: contact.verified,
-                            addresses: ordered,
-                            service: service.clone(),
-                            seen: Instant::now(),
-                        },
-                    );
+            // A self announcement is not a peer or a failure. Other failed
+            // candidates keep the short retry without replacing a healthy
+            // service's UI state with untrusted discovery errors.
+            if saw_own {
+                let mut state = lock(&shared.state);
+                if candidate_current(&state, &service, &addresses) {
+                    if let Some(candidate) = state.candidates.get_mut(&service) {
+                        candidate.seen = Instant::now();
+                        candidate.next_probe = Instant::now() + PROBE_REFRESH;
+                    }
                 }
-            });
-            return;
+            }
+        });
+        if !started {
+            let mut state = lock(&shared.state);
+            if let Some(candidate) = state.candidates.get_mut(&attempted_service) {
+                if candidate.addresses == attempted_addresses && candidate.next_probe == next_probe {
+                    candidate.next_probe = due_at;
+                }
+            }
         }
-    });
+    }
 }
 
 fn accept_connection(shared: &Arc<Shared>, stream: TcpStream, address: SocketAddr) {
@@ -1881,4 +2002,66 @@ mod tests {
         a.shutdown().unwrap();
         b.shutdown().unwrap();
     }
+
+    #[test]
+    fn resolved_candidate_survives_busy_admission_and_uses_latest_addresses() {
+        let root = tempfile::tempdir().unwrap();
+        let alice = Profile::open(root.path().join("alice")).unwrap();
+        let bob = Profile::open(root.path().join("bob")).unwrap();
+        alice.initialize("Synthetic discovery sender", PASSWORD).unwrap();
+        let bc = bob.initialize("Synthetic discovery receiver", PASSWORD).unwrap();
+        let a = node(&alice);
+        let b = node(&bob);
+        let release = Arc::new(AtomicBool::new(false));
+        let mut occupied = 0;
+        let until = Instant::now() + Duration::from_secs(15);
+        while occupied < MAX_JOBS && Instant::now() < until {
+            let permit = release.clone();
+            if a.shared.start_job(format!("occupied-{occupied}"), move |shared| {
+                while !permit.load(Ordering::Acquire) && !shared.stopped.load(Ordering::Acquire) {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            }) { occupied += 1; }
+            else { thread::sleep(Duration::from_millis(5)); }
+        }
+        assert_eq!(occupied, MAX_JOBS);
+        // A real resolved event can arrive while all four workers are busy.
+        // A later event must replace its addresses even when the probe cannot
+        // be admitted. No Peer is injected and multicast is not required here.
+        let unavailable = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1);
+        for index in 0..MAX_JOBS + 2 {
+            probe(&a.shared, format!("older-failed-{index}"), vec![unavailable]);
+        }
+        probe(&a.shared, "retained".to_owned(), vec![unavailable]);
+        probe(&a.shared, "retained".to_owned(), vec![address(&b)]);
+        probe(&a.shared, "removed".to_owned(), vec![address(&b)]);
+        forget_candidate(&a.shared, "removed");
+        probe(&a.shared, "expired".to_owned(), vec![address(&b)]);
+        {
+            let mut state = lock(&a.shared.state);
+            state.candidates.get_mut("expired").unwrap().seen = Instant::now() - CANDIDATE_TTL;
+        }
+        retry_candidates(&a.shared);
+        assert!(a.snapshot().peers.is_empty());
+        {
+            let state = lock(&a.shared.state);
+            assert_eq!(state.candidates["retained"].addresses, vec![address(&b)]);
+            assert!(!state.candidates.contains_key("removed"));
+            assert!(!state.candidates.contains_key("expired"));
+        }
+        release.store(true, Ordering::Release);
+        // Only the normal actor's retry tick can now do Card RPC, signature
+        // inspection, self filtering and publication. There is no Refresh.
+        wait_until(|| a.snapshot().peers.iter().any(|peer| peer.card.fingerprint == bc.fingerprint));
+        {
+            let state = lock(&a.shared.state);
+            let peer = state.peers.get(&PeerId(bc.fingerprint)).unwrap();
+            assert_eq!(peer.service, "retained");
+            assert!(!state.jobs.contains("probe:removed"));
+            assert!(!state.jobs.contains("probe:expired"));
+        }
+        a.shutdown().unwrap();
+        b.shutdown().unwrap();
+    }
+
 }

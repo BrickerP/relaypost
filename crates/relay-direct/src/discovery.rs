@@ -110,12 +110,12 @@ impl Discovery {
                     addresses.sort();
                     addresses.dedup();
                     addresses.truncate(8);
-                    if !addresses.is_empty() {
-                        output.push(Event::Resolved {
-                            service: info.get_fullname().to_owned(),
-                            addresses,
-                        });
-                    }
+                    // An update with no supported addresses must invalidate
+                    // an older candidate rather than keep probing stale IPs.
+                    output.push(Event::Resolved {
+                        service: info.get_fullname().to_owned(),
+                        addresses,
+                    });
                 }
                 ServiceEvent::ServiceRemoved(_, name) => output.push(Event::Removed(name)),
                 _ => {}
