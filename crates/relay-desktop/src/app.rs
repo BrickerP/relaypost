@@ -1733,7 +1733,11 @@ impl RelayApp {
                 ui.label("Starting local network discovery…");
             }
             ServiceState::Ready => {
-                ui.label(RichText::new("Looking for nearby devices…").small().color(MUTED));
+                ui.label(
+                    RichText::new("Looking for nearby devices…")
+                        .small()
+                        .color(MUTED),
+                );
             }
             ServiceState::Unavailable { message, .. } => {
                 ui.label(RichText::new("Local network discovery is unavailable. Identity cards and encrypted file packages still work offline.").color(AMBER));
