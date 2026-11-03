@@ -153,10 +153,47 @@ impl DirectHandle {
     pub fn snapshot(&self) -> DirectSnapshot { lock(&self.shared.state).snapshot.clone() }
     pub fn command(&self, command: DirectCommand) -> std::result::Result<(), DirectCommandError> {
         if self.shared.stopped.load(Ordering::Acquire) { return Err(DirectCommandError::Stopped); }
-        self.commands.try_send(command).map_err(|e| match e {
+        let pairing = if let DirectCommand::RequestPairing { peer } = &command {
+            let endpoint = self.shared.endpoint(peer).map_err(|_| DirectCommandError::PeerUnavailable)?;
+            if lock(&self.shared.state).jobs.contains(&format!("pair:{}", peer.0)) {
+                return Err(DirectCommandError::QueueFull);
+            }
+            let mut admitted = false;
+            let mut already_pending = false;
+            self.shared.edit(|state| {
+                if let Some(old) = state.snapshot.pairing_attempts.iter_mut().find(|row| &row.peer == peer) {
+                    if matches!(old.state, PairingAttemptState::Sending | PairingAttemptState::WaitingForPeer) {
+                        already_pending = true;
+                        return;
+                    }
+                    old.card = endpoint.card.clone();
+                    old.state = PairingAttemptState::Sending;
+                    admitted = true;
+                    return;
+                }
+                if state.snapshot.pairing_attempts.len() >= MAX_PEERS {
+                    let terminal = state.snapshot.pairing_attempts.iter().position(|row|
+                        !matches!(row.state, PairingAttemptState::Sending | PairingAttemptState::WaitingForPeer));
+                    if let Some(index) = terminal { state.snapshot.pairing_attempts.remove(index); }
+                    else { return; }
+                }
+                state.snapshot.pairing_attempts.push(PairingAttempt {
+                    peer: peer.clone(), card: endpoint.card.clone(), state: PairingAttemptState::Sending,
+                });
+                admitted = true;
+            });
+            if already_pending { return Ok(()); }
+            if !admitted { return Err(DirectCommandError::QueueFull); }
+            Some(peer.clone())
+        } else { None };
+        let result = self.commands.try_send(command).map_err(|e| match e {
             mpsc::TrySendError::Full(_) => DirectCommandError::QueueFull,
             mpsc::TrySendError::Disconnected(_) => DirectCommandError::Stopped,
-        })
+        });
+        if let (Some(peer), Err(error)) = (pairing, &result) {
+            pairing_state(&self.shared, &peer, PairingAttemptState::Failed { message: error.to_string(), retryable: true });
+        }
+        result
     }
     pub fn shutdown(&self) -> std::result::Result<(), DirectCommandError> {
         self.shared.stopped.store(true, Ordering::Release);
@@ -306,8 +343,7 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
     shared.close_sockets();
     if let Some(mut discovery) = discovery { discovery.stop(); }
     listener.take();
-    let until = Instant::now() + Duration::from_millis(500);
-    while Instant::now() < until && (shared.jobs.load(Ordering::Acquire) > 0 || shared.connections.load(Ordering::Acquire) > 0) {
+    while shared.jobs.load(Ordering::Acquire) > 0 || shared.connections.load(Ordering::Acquire) > 0 {
         thread::sleep(Duration::from_millis(10));
     }
 }
@@ -536,6 +572,7 @@ fn receive_bundle(shared: &Arc<Shared>, stream: &mut wire::Stream, length: u64) 
         offer.receiving = true;
         offer.artifact.clone()
     };
+    stream.begin_bundle();
     let result = (|| -> Result<_> {
         let mut temporary = tempfile::NamedTempFile::new()?;
         shared.incoming(&id, IncomingOfferState::Receiving { received: 0, total: artifact.bundle_bytes });
@@ -568,13 +605,17 @@ fn pairing_state(shared: &Shared, peer: &PeerId, state: PairingAttemptState) {
     shared.edit(|s| { if let Some(attempt) = s.snapshot.pairing_attempts.iter_mut().find(|r| &r.peer == peer) { attempt.state = state; } });
 }
 fn request_pairing(shared: &Arc<Shared>, peer: PeerId) {
-    if lock(&shared.state).jobs.contains(&format!("pair:{}", peer.0)) { return; }
-    let Ok(endpoint) = shared.endpoint(&peer) else { return; };
-    shared.edit(|s| {
-        let row = PairingAttempt { peer: peer.clone(), card: endpoint.card.clone(), state: PairingAttemptState::Sending };
-        if let Some(old) = s.snapshot.pairing_attempts.iter_mut().find(|a| a.peer == peer) { *old = row; }
-        else if s.snapshot.pairing_attempts.len() < MAX_PEERS { s.snapshot.pairing_attempts.push(row); }
-    });
+    if lock(&shared.state).jobs.contains(&format!("pair:{}", peer.0)) {
+        pairing_state(shared, &peer, PairingAttemptState::Failed { message: "The previous pairing action is still stopping. Try again shortly.".to_owned(), retryable: true });
+        return;
+    }
+    let endpoint = match shared.endpoint(&peer) {
+        Ok(endpoint) => endpoint,
+        Err(error) => {
+            pairing_state(shared, &peer, PairingAttemptState::Failed { message: error.to_string(), retryable: true });
+            return;
+        }
+    };
     let failed_peer = peer.clone();
     let started = shared.start_job(format!("pair:{}", peer.0), move |shared| {
         let result = (|| -> Result<()> {
@@ -690,6 +731,7 @@ fn send_parcel(shared: &Arc<Shared>, peer: &PeerId, id: &str) -> Result<()> {
         let _socket = shared.track(&stream)?;
         wire::write_header(&mut stream, Kind::Bundle, prepared.bundle_len() + 64)?;
         stream.write_all(id.as_bytes())?;
+        stream.begin_bundle();
         let mut bundle = prepared.open_bundle()?;
         shared.outgoing(id, OutgoingTransferState::Sending { sent: 0, total: prepared.bundle_len() });
         let mut last = Instant::now();
@@ -753,7 +795,12 @@ mod tests {
         let handle = DirectHandle::spawn_with_config(profile.clone(), Arc::new(|| {}), DirectConfig {
             listen_addr: SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0), discovery: false,
         });
-        wait_until(|| lock(&handle.shared.address).is_some());
+        let until = Instant::now() + Duration::from_secs(15);
+        while lock(&handle.shared.address).is_none() && Instant::now() < until {
+            if matches!(handle.snapshot().service, ServiceState::Unavailable { .. }) { break; }
+            thread::sleep(Duration::from_millis(25));
+        }
+        assert!(lock(&handle.shared.address).is_some(), "Listener did not start: {:?}", handle.snapshot().service);
         handle
     }
     fn address(node: &DirectHandle) -> SocketAddrV4 { lock(&node.shared.address).unwrap() }
@@ -788,7 +835,7 @@ mod tests {
         b.command(DirectCommand::ReloadProfile).unwrap();
         let source = root.path().join("payload.txt");
         fs::write(&source, b"a real encrypted loopback handoff").unwrap();
-        let parcel = alice.seal(&[source.clone()], &b_card.fingerprint, PASSWORD).unwrap();
+        let parcel = alice.seal(std::slice::from_ref(&source), &b_card.fingerprint, PASSWORD).unwrap();
         a.command(DirectCommand::Send { peer: PeerId(b_card.fingerprint.clone()), parcel_id: parcel.parcel_id.clone() }).unwrap();
         wait_until(|| b.snapshot().incoming.iter().any(|p| p.parcel_id == parcel.parcel_id && matches!(p.state, IncomingOfferState::AwaitingDecision)));
         assert!(bob.direct_offers().unwrap().is_empty());
@@ -849,7 +896,7 @@ mod tests {
         alice.import_contact_card(&bc).unwrap(); alice.trust_contact(&bc.fingerprint).unwrap();
         bob.import_contact_card(&ac).unwrap(); bob.trust_contact(&ac.fingerprint).unwrap();
         let source = root.path().join("restart.txt"); fs::write(&source, b"survives application restart").unwrap();
-        let record = alice.seal(&[source.clone()], &bc.fingerprint, PASSWORD).unwrap();
+        let record = alice.seal(std::slice::from_ref(&source), &bc.fingerprint, PASSWORD).unwrap();
         let prepared = alice.prepare_direct_handoff(&record.parcel_id).unwrap();
         let encrypted = root.path().join("encrypted.bundle");
         let mut file = fs::File::create(&encrypted).unwrap();
@@ -886,7 +933,13 @@ mod tests {
         let receiver = node(&profile);
         let mut blocked = wire::connect(address(&receiver)).unwrap();
         blocked.write_all(b"RLY").unwrap();
-        wait_until(|| receiver.shared.connections.load(Ordering::Acquire) > 0);
+        let accepted_by = Instant::now() + Duration::from_secs(15);
+        while receiver.shared.connections.load(Ordering::Acquire) == 0 && Instant::now() < accepted_by {
+            thread::sleep(Duration::from_millis(25));
+        }
+        assert!(receiver.shared.connections.load(Ordering::Acquire) > 0,
+            "Partial-header connection was not retained: service={:?}, tracked_sockets={}, finished={}",
+            receiver.snapshot().service, lock(&receiver.shared.active).len(), receiver.shared.finished.load(Ordering::Acquire));
         let start = Instant::now();
         receiver.shutdown().unwrap();
         assert!(start.elapsed() < Duration::from_secs(2));

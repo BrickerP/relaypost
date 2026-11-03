@@ -147,6 +147,7 @@ pub enum DirectCommand {
 
 #[derive(Clone, Debug)]
 pub enum DirectCommandError {
+    PeerUnavailable,
     QueueFull,
     Stopped,
     ShutdownTimeout,
@@ -155,6 +156,7 @@ pub enum DirectCommandError {
 impl std::fmt::Display for DirectCommandError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::PeerUnavailable => "That computer is no longer nearby. Scan again before adding it.",
             Self::QueueFull => "Too many network actions are pending. Try again shortly.",
             Self::Stopped => "Local-network transfers have stopped.",
             Self::ShutdownTimeout => "A network operation did not stop within two seconds.",

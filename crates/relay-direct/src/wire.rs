@@ -9,6 +9,7 @@ pub(crate) const MAX_JSON: u64 = 140 * 1024;
 pub(crate) const MAX_BUNDLE: u64 = relay_core::MAX_DIRECT_BUNDLE;
 pub(crate) const IDLE: Duration = Duration::from_secs(30);
 pub(crate) const DEADLINE: Duration = Duration::from_secs(600);
+const CONTROL_DEADLINE: Duration = Duration::from_secs(10);
 const MAGIC: &[u8; 8] = b"RLYPST1\n";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,12 +117,17 @@ pub(crate) struct Stream {
 
 impl Stream {
     pub fn new(socket: TcpStream) -> Result<Self> {
+        // BSD may inherit O_NONBLOCK from the accepting listener. The protocol
+        // uses bounded blocking reads on every platform, including partial frames.
+        socket.set_nonblocking(false)?;
         socket.set_nodelay(true)?;
         Ok(Self {
             socket,
-            deadline: Instant::now() + DEADLINE,
+            deadline: Instant::now() + CONTROL_DEADLINE,
         })
     }
+    pub fn begin_bundle(&mut self) { self.deadline = Instant::now() + DEADLINE; }
+
     fn remaining(&self) -> std::io::Result<Duration> {
         self.deadline
             .checked_duration_since(Instant::now())
