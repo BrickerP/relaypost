@@ -973,10 +973,6 @@ impl RelayApp {
             );
         });
         ui.add_space(20.0);
-        let valid = !self.inputs.is_empty()
-            && self.inputs.len() <= 100
-            && self.selected_bytes.is_some_and(|n| n <= 64 * 1024 * 1024)
-            && trusted.iter().any(|c| c.card.fingerprint == self.recipient);
         if self.inputs.len() > 100 {
             ui.label(RichText::new("Choose 100 files or fewer for one transfer.").color(RED));
         }
@@ -997,6 +993,43 @@ impl RelayApp {
                 self.contact_name(&self.recipient)
             ));
         }
+    }
+
+    fn send_footer(&mut self, context: &egui::Context) {
+        if self.screen != Screen::Send {
+            return;
+        }
+        let Some(identity) = &self.identity else {
+            return;
+        };
+        let recipients: Vec<_> = self
+            .contacts
+            .iter()
+            .filter(|contact| {
+                contact.verified && contact.card.fingerprint != identity.fingerprint
+            })
+            .collect();
+        let showing_transfer = self.sealed_id.as_ref().is_some_and(|id| {
+            self.deliveries.iter().any(|record| {
+                record.parcel_id == *id && record.direction == Direction::Outgoing
+            })
+        });
+        if recipients.is_empty() || showing_transfer {
+            return;
+        }
+        let recipient = recipients
+            .iter()
+            .find(|contact| contact.card.fingerprint == self.recipient)
+            .map(|contact| contact.card.name.clone());
+        let valid = !self.inputs.is_empty()
+            && self.inputs.len() <= 100
+            && self.selected_bytes.is_some_and(|n| n <= 64 * 1024 * 1024)
+            && recipient.is_some();
+        let summary = format!(
+            "To {} · {}",
+            recipient.as_deref().unwrap_or("choose a recipient"),
+            file_count(self.inputs.len())
+        );
         let peer = self
             .direct_state
             .peers
@@ -1005,25 +1038,44 @@ impl RelayApp {
             .cloned();
         let direct_available =
             peer.is_some() && matches!(self.direct_state.service, ServiceState::Ready);
-        if primary(ui, "Send directly", valid && direct_available).clicked() {
-            if let Some(peer) = peer {
-                self.unlock = Some(Unlock::Send(SendIntent::Direct {
-                    peer: peer.id,
-                    recipient: self.recipient.clone(),
-                }));
-            }
-        }
-        if !direct_available && !self.recipient.is_empty() {
-            ui.label("The recipient is not available on the local network. Keep both apps open on the same network, or save a package for offline delivery.");
-        }
-        if ui
-            .add_enabled(valid, egui::Button::new("Save transfer package…"))
-            .clicked()
-        {
-            self.unlock = Some(Unlock::Send(SendIntent::Package {
-                recipient: self.recipient.clone(),
-            }));
-        }
+        egui::TopBottomPanel::bottom("send_actions")
+            .resizable(false)
+            .frame(
+                egui::Frame::new()
+                    .fill(Color32::WHITE)
+                    .inner_margin(egui::Margin::symmetric(32, 12)),
+            )
+            .show(context, |ui| {
+                let available_height = ui.max_rect().height();
+                ui.set_max_width(ui.available_width().min(860.0));
+                ui.add_enabled_ui(!self.busy() && !self.modal_open(), |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(summary);
+                        if primary(ui, "Send directly", valid && direct_available).clicked() {
+                            if let Some(peer) = peer {
+                                self.unlock = Some(Unlock::Send(SendIntent::Direct {
+                                    peer: peer.id,
+                                    recipient: self.recipient.clone(),
+                                }));
+                            }
+                        }
+                        if ui
+                            .add_enabled(valid, egui::Button::new("Save transfer package…"))
+                            .clicked()
+                        {
+                            self.unlock = Some(Unlock::Send(SendIntent::Package {
+                                recipient: self.recipient.clone(),
+                            }));
+                        }
+                    });
+                    if !direct_available && recipient.is_some() {
+                        ui.label(RichText::new("Keep both apps open on the same local network, or save a package for offline delivery.").small().color(MUTED));
+                    }
+                });
+                if (ui.min_rect().height() - available_height).abs() > 0.5 {
+                    ui.ctx().request_discard("Send actions changed height");
+                }
+            });
     }
 
     fn measure_inputs(&mut self, context: &egui::Context) {
@@ -2612,6 +2664,7 @@ impl eframe::App for RelayApp {
             }
         }
         self.header(context);
+        self.send_footer(context);
 
         egui::CentralPanel::default()
             .frame(
