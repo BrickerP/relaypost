@@ -7,9 +7,7 @@
 // Owner: Kiro (novice-ux redesign, 2026-11-03).
 // Compilation and validation are pending GitHub Actions; no local Rust run.
 
-use eframe::egui::{
-    self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle,
-};
+use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
@@ -58,8 +56,7 @@ pub const DISPLAY_FAMILY: &str = "RelayDisplay";
 static REGULAR_BYTES: &[u8] =
     include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf");
 
-static MEDIUM_BYTES: &[u8] =
-    include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-Medium.ttf");
+static MEDIUM_BYTES: &[u8] = include_bytes!("../assets/fonts/AtkinsonHyperlegibleNext-Medium.ttf");
 
 // ---------------------------------------------------------------------------
 // Public configuration entry point
@@ -95,7 +92,13 @@ pub fn configure(context: &egui::Context) {
     style.visuals.panel_fill = PAPER;
     style.visuals.window_fill = Color32::WHITE;
     style.visuals.window_stroke = egui::Stroke::new(1.0_f32, LINE);
-    for widget in [&mut style.visuals.widgets.noninteractive, &mut style.visuals.widgets.inactive, &mut style.visuals.widgets.hovered, &mut style.visuals.widgets.active, &mut style.visuals.widgets.open] {
+    for widget in [
+        &mut style.visuals.widgets.noninteractive,
+        &mut style.visuals.widgets.inactive,
+        &mut style.visuals.widgets.hovered,
+        &mut style.visuals.widgets.active,
+        &mut style.visuals.widgets.open,
+    ] {
         widget.corner_radius = egui::CornerRadius::same(10);
     }
 
@@ -141,18 +144,15 @@ pub fn configure(context: &egui::Context) {
     // --- Style ------------------------------------------------------------
     // Text styles.
     let display = FontFamily::Name(DISPLAY_FAMILY.into());
-    style.text_styles.insert(
-        TextStyle::Body,
-        FontId::new(16.0, FontFamily::Proportional),
-    );
-    style.text_styles.insert(
-        TextStyle::Button,
-        FontId::new(15.0, display.clone()),
-    );
-    style.text_styles.insert(
-        TextStyle::Heading,
-        FontId::new(30.0, display),
-    );
+    style
+        .text_styles
+        .insert(TextStyle::Body, FontId::new(16.0, FontFamily::Proportional));
+    style
+        .text_styles
+        .insert(TextStyle::Button, FontId::new(15.0, display.clone()));
+    style
+        .text_styles
+        .insert(TextStyle::Heading, FontId::new(30.0, display));
     style.text_styles.insert(
         TextStyle::Small,
         FontId::new(13.0, FontFamily::Proportional),

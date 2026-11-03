@@ -34,12 +34,7 @@ pub fn page_title(ui: &mut Ui, title: &str, subtitle: &str) {
 /// Renders an all-caps section label in a smaller MUTED style, followed by a
 /// 4 px gap before the section's contents.
 pub fn section_label(ui: &mut Ui, label: &str) {
-    ui.label(
-        RichText::new(label)
-            .size(11.0)
-            .strong()
-            .color(MUTED),
-    );
+    ui.label(RichText::new(label).size(11.0).strong().color(MUTED));
     ui.add_space(4.0);
 }
 
@@ -115,12 +110,7 @@ pub fn empty_state(ui: &mut Ui, title: &str, body: &str) {
 // ---------------------------------------------------------------------------
 
 /// Labels for the four phases of a RelayPost offline handoff.
-const PHASE_LABELS: [&str; 4] = [
-    "Prepared",
-    "Copied to drive",
-    "Files saved",
-    "Confirmed",
-];
+const PHASE_LABELS: [&str; 4] = ["Prepared", "Copied to drive", "Files saved", "Confirmed"];
 
 /// Renders the handoff ribbon: four phases connected by horizontal lines.
 ///
@@ -158,8 +148,10 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
 
     // Allocate a single rectangle for the whole ribbon so the caller's layout
     // advances past it in one step.
-    let (ribbon_rect, _) =
-        ui.allocate_exact_size(Vec2::new(available_width, total_height), egui::Sense::hover());
+    let (ribbon_rect, _) = ui.allocate_exact_size(
+        Vec2::new(available_width, total_height),
+        egui::Sense::hover(),
+    );
 
     let painter = ui.painter();
     let circle_y = ribbon_rect.top() + circle_row_height / 2.0;
@@ -218,11 +210,7 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
         } else {
             // Future — hollow circle.
             painter.circle_filled(center, circle_r, PAPER);
-            painter.circle_stroke(
-                center,
-                circle_r,
-                Stroke::new(1.5_f32, LINE),
-            );
+            painter.circle_stroke(center, circle_r, Stroke::new(1.5_f32, LINE));
         }
     }
 
@@ -231,7 +219,13 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
         let is_current = i == stage;
         let is_future = i > stage;
 
-        let text_color = if is_future { MUTED } else if is_current { INK } else { TEAL };
+        let text_color = if is_future {
+            MUTED
+        } else if is_current {
+            INK
+        } else {
+            TEAL
+        };
         let text_size = if is_current { 13.5_f32 } else { 12.5_f32 };
 
         let col_rect = egui::Rect::from_min_size(
@@ -252,9 +246,15 @@ pub fn handoff_ribbon(ui: &mut Ui, stage: usize) {
         let rich = if is_current { rich.strong() } else { rich };
         child.label(rich);
         child.label(
-            RichText::new(if i < stage { "Done" } else if is_current { "Current step" } else { "Not yet" })
-                .size(12.0)
-                .color(text_color),
+            RichText::new(if i < stage {
+                "Done"
+            } else if is_current {
+                "Current step"
+            } else {
+                "Not yet"
+            })
+            .size(12.0)
+            .color(text_color),
         );
     }
 

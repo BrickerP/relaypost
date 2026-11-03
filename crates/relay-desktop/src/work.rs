@@ -273,7 +273,9 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::DiscardIncomplete => {
             let count = profile.discard_incomplete_receives()?;
             (
-                format!("Cleared {count} unfinished receive folders. Saved files were not changed."),
+                format!(
+                    "Cleared {count} unfinished receive folders. Saved files were not changed."
+                ),
                 Payload::Discarded,
             )
         }
@@ -426,7 +428,9 @@ fn open_saved_folder(profile: &Profile, folder: &Path) -> Result<()> {
     let metadata = std::fs::symlink_metadata(folder)
         .with_context(|| format!("Cannot find the saved folder: {}", folder.display()))?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        bail!("The saved folder is no longer available as a regular folder. Review its local record.");
+        bail!(
+            "The saved folder is no longer available as a regular folder. Review its local record."
+        );
     }
     // Canonicalization gives the OS opener an absolute filesystem path, never
     // an option, URL, shell command, or executable selected by the UI.
