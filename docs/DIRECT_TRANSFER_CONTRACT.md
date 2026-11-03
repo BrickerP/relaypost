@@ -64,6 +64,13 @@ public card before presenting a device. Exclude self by fingerprint, not IP;
 two profiles on one host have different identities. First implementation uses
 IPv4 private, link-local and loopback endpoints.
 
+Retain at most 64 latest resolved candidates when a probe is busy or temporarily
+fails. The coordinator fairly retries due candidates with bounded concurrency;
+healthy probes prefer the last successful address only while it remains in the
+latest resolved set and verify the same full fingerprint. Service removal,
+expiry and address replacement prevent an older in-flight result from reviving
+a stale candidate. Successful health checks renew both candidate and peer life.
+
 The daemon monitor must surface binding/permission/discovery failures. Explicit
 shutdown waits for daemon/listener completion rather than relying on Drop.
 Upstream references: [API](https://docs.rs/mdns-sd/0.21.7/mdns_sd/),
