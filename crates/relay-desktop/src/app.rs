@@ -7,8 +7,8 @@ use relay_core::{
     ParcelRecord, PeerCard, Profile, ReceiveResult, RecoverySummary,
 };
 use relay_direct::{
-    DirectCommand, DirectHandle, DirectSnapshot, IncomingOfferState, OutgoingTransferState,
-    PairingAttemptState, PeerId, ServiceState,
+    DirectCommand, DirectHandle, DirectSnapshot, IncomingOfferState, IncomingPairingState,
+    OutgoingTransferState, PairingAttemptState, PairingId, PeerId, ServiceState,
 };
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -53,9 +53,14 @@ enum Unlock {
     Recover,
 }
 
+enum PairingWait {
+    Peer(PeerId),
+    Import(PairingId),
+}
+
 struct PairingTask {
     fingerprint: String,
-    waiting_for_peer: bool,
+    wait: PairingWait,
 }
 
 struct Pending {
@@ -372,8 +377,12 @@ impl RelayApp {
     }
 
     fn direct_command(&mut self, command: DirectCommand) -> bool {
+        let clear_feedback = !matches!(&command, DirectCommand::ReloadProfile);
         match self.direct.command(command) {
-            Ok(()) => true,
+            Ok(()) => {
+                if clear_feedback { self.error = None; self.notice.clear(); }
+                true
+            },
             Err(error) => {
                 self.error = Some(format!("The local network action could not start: {error}"));
                 false
@@ -419,22 +428,50 @@ impl RelayApp {
         if self.busy() || self.modal_open() {
             return;
         }
-        let Some(task) = &mut self.pairing_task else {
-            return;
-        };
-        if task.waiting_for_peer {
-            let attempt = self
-                .direct_state
-                .pairing_attempts
-                .iter()
-                .find(|attempt| attempt.card.fingerprint == task.fingerprint);
-            match attempt.map(|attempt| &attempt.state) {
-                Some(PairingAttemptState::PeerAccepted) => task.waiting_for_peer = false,
-                Some(PairingAttemptState::Declined | PairingAttemptState::Failed { .. }) => {
-                    self.pairing_task = None;
-                    return;
+        let Some(task) = &self.pairing_task else { return };
+        match &task.wait {
+            PairingWait::Peer(peer) => {
+                let attempt = self.direct_state.pairing_attempts.iter().find(|attempt| &attempt.peer == peer && attempt.card.fingerprint == task.fingerprint);
+                match attempt.map(|attempt| &attempt.state) {
+                    Some(PairingAttemptState::PeerAccepted) => {}
+                    Some(PairingAttemptState::Declined) => {
+                        self.error = Some("The other person declined this identity request.".to_owned());
+                        self.pairing_task = None;
+                        return;
+                    }
+                    Some(PairingAttemptState::Failed { message, .. }) => {
+                        self.error = Some(format!("This identity request could not finish: {message}"));
+                        self.pairing_task = None;
+                        return;
+                    }
+                    None if !self.direct_state.peers.iter().any(|nearby| &nearby.id == peer && nearby.card.fingerprint == task.fingerprint) => {
+                        self.error = Some("This identity request stopped because the device is no longer nearby. Look for it again or use an identity card.".to_owned());
+                        self.pairing_task = None;
+                        return;
+                    }
+                    _ => return,
                 }
-                _ => return,
+            }
+            PairingWait::Import(request) => {
+                let status = self.direct_state.incoming_pairings.iter().find(|incoming| &incoming.id == request && incoming.card.fingerprint == task.fingerprint);
+                match status.map(|incoming| &incoming.state) {
+                    Some(IncomingPairingState::Accepted) => {}
+                    Some(IncomingPairingState::AwaitingDecision) => return,
+                    Some(IncomingPairingState::Failed { message }) => {
+                        self.error = Some(format!("This identity request could not finish: {message}"));
+                        self.pairing_task = None;
+                        return;
+                    }
+                    Some(IncomingPairingState::Declined) => {
+                        self.pairing_task = None;
+                        return;
+                    }
+                    None => {
+                        self.error = Some("This identity request expired. Ask the other person to send a new request.".to_owned());
+                        self.pairing_task = None;
+                        return;
+                    }
+                }
             }
         }
         let contact = self
@@ -1415,14 +1452,8 @@ impl RelayApp {
         if primary(ui, "Add recipient", true).clicked() {
             self.add_recipient_for(Screen::Recipients);
         }
-        if !self.direct_state.incoming_pairings.is_empty()
-            && ui
-                .button(format!(
-                    "Review device requests ({})",
-                    self.direct_state.incoming_pairings.len()
-                ))
-                .clicked()
-        {
+        let pending_requests = self.direct_state.incoming_pairings.iter().filter(|request| matches!(request.state, IncomingPairingState::AwaitingDecision)).count();
+        if pending_requests > 0 && ui.button(format!("Review device requests ({pending_requests})")).clicked() {
             self.add_recipient_for(Screen::Recipients);
         }
         ui.add_space(20.0);
@@ -1478,23 +1509,38 @@ impl RelayApp {
             self.direct_command(DirectCommand::RefreshDiscovery);
         }
         for request in self.direct_state.incoming_pairings.clone() {
+            if matches!(request.state, IncomingPairingState::Accepted) && self.contacts.iter().any(|contact| contact.card.fingerprint == request.card.fingerprint && contact.verified) { continue; }
             let scope = egui::Id::new(("incoming_pairing", &request.id));
             ui.push_id(scope, |ui| {
-            ui.separator();
-            ui.label(RichText::new(format!("{} wants to exchange identities", request.card.name)).font(display_font(18.0)));
-            ui.label("Accepting adds a public identity card. It does not trust this device or send documents.");
-            ui.horizontal_wrapped(|ui| {
-                if ui.add_enabled(self.pairing_task.is_none(), egui::Button::new("Accept request")).clicked()
-                    && self.direct_command(DirectCommand::AcceptPairing { request: request.id.clone() }) {
-                    self.pairing_task = Some(PairingTask { fingerprint: request.card.fingerprint.clone(), waiting_for_peer: false });
+                ui.separator();
+                ui.label(RichText::new(&request.card.name).font(display_font(18.0)));
+                match request.state {
+                    IncomingPairingState::AwaitingDecision => {
+                        ui.label("This device wants to exchange identity cards. Accepting does not trust the device or send documents.");
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.add_enabled(self.pairing_task.is_none(), egui::Button::new("Accept request")).clicked()
+                                && self.direct_command(DirectCommand::AcceptPairing { request: request.id.clone() }) {
+                                self.pairing_task = Some(PairingTask { fingerprint: request.card.fingerprint.clone(), wait: PairingWait::Import(request.id.clone()) });
+                            }
+                            if ui.button("Decline").clicked() {
+                                self.direct_command(DirectCommand::DeclinePairing { request: request.id.clone() });
+                            }
+                        });
+                    }
+                    IncomingPairingState::Accepted => {
+                        ui.label("The identity card was added here. Check its complete safety code before sending files.");
+                        self.finish_identity_check(ui, &request.card.fingerprint);
+                    }
+                    IncomingPairingState::Declined => { ui.label("You declined this identity request."); }
+                    IncomingPairingState::Failed { message } => {
+                        ui.label(RichText::new("This identity request did not complete. Ask the other person to try again.").color(AMBER));
+                        ui.collapsing("Request details", |ui| { ui.label(message); });
+                    }
                 }
-                if ui.button("Decline").clicked() {
-                    self.direct_command(DirectCommand::DeclinePairing { request: request.id.clone() });
-                }
-            });
             });
         }
         for attempt in self.direct_state.pairing_attempts.clone() {
+            if matches!(attempt.state, PairingAttemptState::PeerAccepted) && self.contacts.iter().any(|contact| contact.card.fingerprint == attempt.card.fingerprint && contact.verified) { continue; }
             let scope = egui::Id::new(("pairing_attempt", &attempt.peer));
             ui.push_id(scope, |ui| {
             ui.separator();
@@ -1502,14 +1548,17 @@ impl RelayApp {
             match attempt.state {
                 PairingAttemptState::Sending => { ui.spinner(); ui.label("Sending the identity request…"); }
                 PairingAttemptState::WaitingForPeer => { ui.label("Waiting for the other person to accept in Recipients."); }
-                PairingAttemptState::PeerAccepted => { ui.label("Identity card accepted. Each person must check the complete safety code on their own computer."); }
+                PairingAttemptState::PeerAccepted => {
+                    ui.label("Identity card accepted. Each person must check the complete safety code on their own computer.");
+                    self.finish_identity_check(ui, &attempt.card.fingerprint);
+                }
                 PairingAttemptState::Declined => { ui.label("The other person declined this request."); }
                 PairingAttemptState::Failed { message, retryable } => {
                     ui.label(RichText::new("The identity request could not be completed.").color(AMBER));
                     ui.collapsing("Details", |ui| { ui.label(message); });
                     if retryable && ui.add_enabled(self.pairing_task.is_none(), egui::Button::new("Try request again")).clicked()
                         && self.direct_command(DirectCommand::RequestPairing { peer: attempt.peer.clone() }) {
-                        self.pairing_task = Some(PairingTask { fingerprint: attempt.card.fingerprint.clone(), waiting_for_peer: true });
+                        self.pairing_task = Some(PairingTask { fingerprint: attempt.card.fingerprint.clone(), wait: PairingWait::Peer(attempt.peer.clone()) });
                     }
                 }
             }
@@ -1544,7 +1593,7 @@ impl RelayApp {
                     {
                         self.pairing_task = Some(PairingTask {
                             fingerprint: peer.card.fingerprint.clone(),
-                            waiting_for_peer: true,
+                            wait: PairingWait::Peer(peer.id.clone()),
                         });
                     }
                 });
@@ -1554,6 +1603,19 @@ impl RelayApp {
         if ui.button("Add using identity card…").clicked() {
             self.pairing_task = None;
             self.recipient_step = Some(RecipientStep::ShareCard);
+        }
+    }
+
+    fn finish_identity_check(&mut self, ui: &mut Ui, fingerprint: &str) {
+        let contact = self.contacts.iter().find(|contact| contact.card.fingerprint == fingerprint).cloned();
+        if let Some(contact) = contact {
+            if !contact.verified && ui.button("Check complete safety code").clicked() {
+                self.recipient_return.get_or_insert(Screen::Recipients);
+                self.trust_contact = Some(contact);
+                self.trust_fingerprint.clear();
+            }
+        } else if ui.button("Refresh added device").clicked() {
+            self.start(ui.ctx(), Action::Refresh);
         }
     }
 
@@ -1586,7 +1648,7 @@ impl RelayApp {
     }
 
     fn direct_attention(&mut self, ui: &mut Ui) {
-        if self.screen != Screen::Recipients && !self.direct_state.incoming_pairings.is_empty() {
+        if self.screen != Screen::Recipients && self.direct_state.incoming_pairings.iter().any(|request| matches!(request.state, IncomingPairingState::AwaitingDecision)) {
             ui.horizontal_wrapped(|ui| {
                 ui.label("A nearby device wants to exchange identity cards.");
                 if ui.button("Review request").clicked() {
@@ -1874,7 +1936,11 @@ impl RelayApp {
                     IncomingOfferState::Failed { message, retryable } => {
                         ui.label(RichText::new("This transfer could not finish.").color(AMBER));
                         ui.collapsing("Transfer details", |ui| { ui.label(message); });
-                        if retryable && ui.button("Retry transfer").clicked() { self.direct_command(DirectCommand::Retry { parcel_id: offer.parcel_id.clone() }); }
+                        ui.label(if retryable {
+                            "Ask the sender to retry. A new request will appear here for you to accept."
+                        } else {
+                            "Ask the sender to start a new transfer."
+                        });
                     }
                 }
             });
@@ -2681,7 +2747,9 @@ fn draw_inspection(ui: &mut Ui, inspection: &Inspection) {
 
 fn friendly_error(error: &str) -> &'static str {
     let error = error.to_lowercase();
-    if error.contains("selected recipient is no longer available") {
+    if error.contains("identity request") {
+        "This identity request did not complete. Open Recipients to review the request or add the device again."
+    } else if error.contains("selected recipient is no longer available") {
         "Your protected files are ready, but the selected device left the local network. Try that recipient again or save an encrypted package."
     } else if error.contains("prepared recipient does not match") {
         "The prepared recipient did not match your selection. Review the recipient before starting again."
