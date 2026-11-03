@@ -27,7 +27,7 @@ fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> { value.lock().unwrap_or_else(
 
 #[derive(Clone)]
 struct Endpoint { card: relay_core::PeerCard, addresses: Vec<SocketAddrV4>, service: String, seen: Instant, verified: bool }
-struct PairEntry { card: relay_core::PeerCard, decision: Decision, created: Instant }
+struct PairEntry { card: relay_core::PeerCard, decision: Decision, error: Option<String>, created: Instant }
 struct OfferEntry { artifact: DirectOfferArtifact, decision: Decision, receiving: bool, created: Instant }
 struct State {
     snapshot: DirectSnapshot,
@@ -60,8 +60,13 @@ impl Shared {
                 id: id.clone(), card: peer.card.clone(), locally_verified: peer.verified,
             }).collect();
             state.snapshot.peers.sort_by(|a,b| a.card.name.cmp(&b.card.name).then(a.id.0.cmp(&b.id.0)));
-            state.snapshot.incoming_pairings = state.pairs.iter().filter(|(_, p)| p.decision == Decision::Waiting)
-                .map(|(id,p)| IncomingPairing { id: PairingId(id.clone()), card: p.card.clone() }).collect();
+            state.snapshot.incoming_pairings = state.pairs.iter()
+                .map(|(id,p)| IncomingPairing { id: PairingId(id.clone()), card: p.card.clone(), state: match &p.error {
+                    Some(message) => IncomingPairingState::Failed { message: message.clone() },
+                    None => match p.decision { Decision::Waiting => IncomingPairingState::AwaitingDecision,
+                        Decision::Accepted | Decision::Stored => IncomingPairingState::Accepted,
+                        Decision::Declined => IncomingPairingState::Declined },
+                } }).collect();
             state.snapshot.generation = state.snapshot.generation.wrapping_add(1);
         }
         (self.on_change)();
@@ -225,16 +230,25 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
                 }),
                 DirectCommand::Send { peer, parcel_id } => start_send(&shared, peer, parcel_id),
                 DirectCommand::AcceptOffer { parcel_id } => shared.edit(|s| {
-                    if let Some(offer) = s.offers.get_mut(&parcel_id) {
-                        if offer.decision == Decision::Waiting { offer.decision = Decision::Accepted; }
+                    let accepted = if let Some(offer) = s.offers.get_mut(&parcel_id) {
+                        if offer.decision == Decision::Waiting && offer.created.elapsed() < Duration::from_secs(600) {
+                            offer.decision = Decision::Accepted; true
+                        } else { false }
+                    } else { false };
+                    if !accepted {
+                        if let Some(row) = s.snapshot.incoming.iter_mut().find(|r| r.parcel_id == parcel_id) {
+                            if matches!(row.state, IncomingOfferState::AwaitingDecision | IncomingOfferState::Failed { .. }) {
+                                row.state = IncomingOfferState::Failed { message: "This request is no longer available. Ask the sender to try again.".to_owned(), retryable: false };
+                            }
+                        }
                     }
                 }),
                 DirectCommand::DeclineOffer { parcel_id } => shared.edit(|s| {
                     if let Some(offer) = s.offers.get_mut(&parcel_id) {
-                        if !offer.receiving { offer.decision = Decision::Declined; }
+                        if !offer.receiving && matches!(offer.decision, Decision::Waiting | Decision::Accepted) { offer.decision = Decision::Declined; }
                     }
                     if let Some(row) = s.snapshot.incoming.iter_mut().find(|r| r.parcel_id == parcel_id) {
-                        if !matches!(row.state, IncomingOfferState::Receiving {..}) { row.state = IncomingOfferState::Declined; }
+                        if matches!(row.state, IncomingOfferState::AwaitingDecision | IncomingOfferState::Failed {..}) { row.state = IncomingOfferState::Declined; }
                     }
                 }),
                 DirectCommand::Retry { parcel_id } => {
@@ -267,12 +281,18 @@ fn run(shared: Arc<Shared>, commands: mpsc::Receiver<DirectCommand>, config: Dir
             for peer in endpoints { probe(&shared, peer.service, peer.addresses); }
             shared.edit(|s| {
                 s.peers.retain(|_, peer| peer.seen.elapsed() < Duration::from_secs(35));
-                s.pairs.retain(|_, pair| pair.created.elapsed() < Duration::from_secs(600));
+                for pair in s.pairs.values_mut() {
+                    if pair.decision == Decision::Waiting && pair.created.elapsed() >= Duration::from_secs(600) {
+                        pair.decision = Decision::Declined;
+                        pair.error = Some("The pairing request expired. Ask the other computer to try again.".to_owned());
+                    }
+                }
+                s.pairs.retain(|_, pair| pair.created.elapsed() < Duration::from_secs(660));
                 let expired: HashSet<_> = s.offers.iter().filter(|(_, offer)| !offer.receiving && offer.decision != Decision::Stored && offer.created.elapsed() >= Duration::from_secs(600)).map(|(id, _)| id.clone()).collect();
                 s.offers.retain(|id, _| !expired.contains(id));
                 for incoming in &mut s.snapshot.incoming {
                     if expired.contains(&incoming.parcel_id) {
-                        incoming.state = IncomingOfferState::Failed { message: "This request expired. Ask the sender to try again.".to_owned(), retryable: true };
+                        incoming.state = IncomingOfferState::Failed { message: "This request expired. Ask the sender to try again.".to_owned(), retryable: false };
                     }
                 }
             });
@@ -337,7 +357,7 @@ fn restore_profile(shared: &Arc<Shared>) {
                 row.state = IncomingOfferState::ReadyToSave { parcel_path: parcel.parcel_path, inspection: parcel.inspection };
             } else {
                 state.snapshot.incoming.push(IncomingOffer { parcel_id: id.clone(), sender_name: name,
-                    sender_fingerprint: parcel.inspection.sender.clone(), files: 0, total_bytes: 0,
+                    sender_fingerprint: parcel.inspection.sender.clone(), files: parcel.offer.files, total_bytes: parcel.offer.total_bytes,
                     state: IncomingOfferState::ReadyToSave { parcel_path: parcel.parcel_path, inspection: parcel.inspection } });
             }
         }
@@ -415,10 +435,15 @@ fn handle_request(shared: &Arc<Shared>, stream: &mut wire::Stream) -> Result<Rep
                 if let Some((id, pair)) = state.pairs.iter().find(|(_, pair)| pair.card == request.card && pair.decision != Decision::Declined) {
                     result = Some((id.clone(), pair.decision)); return;
                 }
-                state.pairs.retain(|_, pair| pair.created.elapsed() < Duration::from_secs(600) && pair.decision != Decision::Declined);
-                if state.pairs.len() >= MAX_OFFERS { return; }
+                state.pairs.retain(|_, pair| pair.created.elapsed() < Duration::from_secs(660));
+                if state.pairs.values().filter(|pair| pair.decision == Decision::Waiting).count() >= MAX_OFFERS { return; }
+                if state.pairs.len() >= MAX_PEERS {
+                    let oldest = state.pairs.iter().filter(|(_, pair)| pair.decision != Decision::Waiting)
+                        .min_by_key(|(_, pair)| pair.created).map(|(id, _)| id.clone());
+                    if let Some(oldest) = oldest { state.pairs.remove(&oldest); } else { return; }
+                }
                 let id = session_id();
-                state.pairs.insert(id.clone(), PairEntry { card: request.card, decision: Decision::Waiting, created: Instant::now() });
+                state.pairs.insert(id.clone(), PairEntry { card: request.card, decision: Decision::Waiting, error: None, created: Instant::now() });
                 result = Some((id, Decision::Waiting));
             });
             let (request_id, decision) = result.context("No pairing request can be accepted now")?;
@@ -452,7 +477,15 @@ fn handle_request(shared: &Arc<Shared>, stream: &mut wire::Stream) -> Result<Rep
                     if existing.artifact.envelope_json != artifact.envelope_json ||
                         existing.artifact.envelope_minisig != artifact.envelope_minisig ||
                         existing.artifact.bundle_bytes != artifact.bundle_bytes { return; }
-                    if existing.decision != Decision::Declined { result = Some(existing.decision); return; }
+                    if existing.decision != Decision::Declined {
+                        let decision = existing.decision;
+                        if decision == Decision::Waiting {
+                            if let Some(row) = state.snapshot.incoming.iter_mut().find(|row| row.parcel_id == inspected.parcel_id) {
+                                if matches!(row.state, IncomingOfferState::Failed { .. }) { row.state = IncomingOfferState::AwaitingDecision; }
+                            }
+                        }
+                        result = Some(decision); return;
+                    }
                 }
                 state.offers.retain(|_, value| value.decision != Decision::Declined);
                 let pending: HashSet<_> = state.offers.keys().chain(state.staged.iter()).collect();
@@ -572,8 +605,18 @@ fn request_pairing(shared: &Arc<Shared>, peer: PeerId) {
 }
 
 fn accept_pairing(shared: &Arc<Shared>, request: PairingId) {
-    let card = lock(&shared.state).pairs.get(&request.0).filter(|p| p.decision == Decision::Waiting).map(|p| p.card.clone());
-    let Some(card) = card else { return; };
+    let card = lock(&shared.state).pairs.get(&request.0).filter(|p| p.decision == Decision::Waiting && p.created.elapsed() < Duration::from_secs(600)).map(|p| p.card.clone());
+    let Some(card) = card else {
+        shared.edit(|state| {
+            if let Some(pair) = state.pairs.get_mut(&request.0) {
+                if pair.decision == Decision::Waiting {
+                    pair.decision = Decision::Declined;
+                    pair.error = Some("This pairing request expired. Ask the other computer to try again.".to_owned());
+                }
+            }
+        });
+        return;
+    };
     match shared.profile.import_contact_card(&card) {
         Ok(_) => {
             shared.edit(|state| {
@@ -583,8 +626,10 @@ fn accept_pairing(shared: &Arc<Shared>, request: PairingId) {
         }
         Err(error) => {
             shared.edit(|state| {
-                if let Some(pair) = state.pairs.get_mut(&request.0) { pair.decision = Decision::Declined; }
-                state.snapshot.service = ServiceState::Unavailable { kind: UnavailableKind::LocalNetwork, message: format!("Cannot add that identity: {error}") };
+                if let Some(pair) = state.pairs.get_mut(&request.0) {
+                    pair.decision = Decision::Declined;
+                    pair.error = Some(format!("Cannot add that identity: {error}"));
+                }
             });
         }
     }
@@ -848,6 +893,50 @@ mod tests {
         receiver.shutdown().unwrap();
         let mut byte = [0];
         assert_eq!(blocked.read(&mut byte).unwrap_or(0), 0);
+    }
+
+
+    #[test]
+    fn interrupted_bundle_retry_requires_fresh_receiver_consent() {
+        let root = tempfile::tempdir().unwrap();
+        let alice = Profile::open(root.path().join("alice")).unwrap();
+        let bob = Profile::open(root.path().join("bob")).unwrap();
+        let ac = alice.initialize("Synthetic retry sender", PASSWORD).unwrap();
+        let bc = bob.initialize("Synthetic retry receiver", PASSWORD).unwrap();
+        alice.import_contact_card(&bc).unwrap(); alice.trust_contact(&bc.fingerprint).unwrap();
+        bob.import_contact_card(&ac).unwrap(); bob.trust_contact(&ac.fingerprint).unwrap();
+        let source = root.path().join("retry.txt"); fs::write(&source, b"request consent after interruption").unwrap();
+        let record = alice.seal(&[source], &bc.fingerprint, PASSWORD).unwrap();
+        let prepared = alice.prepare_direct_handoff(&record.parcel_id).unwrap();
+        let a = node(&alice); let b = node(&bob);
+        discover(&a, &b, &bc.fingerprint);
+        let reply = a.shared.rpc(address(&b), Kind::Offer, &prepared.offer).unwrap();
+        assert!(matches!(reply, Reply::Offer { decision: Decision::Waiting, .. }));
+        b.command(DirectCommand::AcceptOffer { parcel_id: record.parcel_id.clone() }).unwrap();
+        wait_until(|| lock(&b.shared.state).offers.get(&record.parcel_id).is_some_and(|offer| offer.decision == Decision::Accepted));
+        let mut interrupted = wire::connect(address(&b)).unwrap();
+        wire::write_header(&mut interrupted, Kind::Bundle, prepared.bundle_len() + 64).unwrap();
+        interrupted.write_all(record.parcel_id.as_bytes()).unwrap();
+        interrupted.write_all(b"x").unwrap();
+        interrupted.socket.shutdown(Shutdown::Write).unwrap();
+        let _ = wire::read_reply(&mut interrupted);
+        wait_until(|| b.snapshot().incoming.iter().any(|row| matches!(row.state, IncomingOfferState::Failed {..})));
+        assert!(bob.direct_offers().unwrap().is_empty());
+        assert!(bob.receipt_artifact(&record.parcel_id).is_err());
+        let retry = a.shared.rpc(address(&b), Kind::Offer, &prepared.offer).unwrap();
+        assert!(matches!(retry, Reply::Offer { decision: Decision::Waiting, .. }));
+        assert!(b.snapshot().incoming.iter().any(|row| matches!(row.state, IncomingOfferState::AwaitingDecision)));
+        // The old Accept does not survive a failed upload.
+        let mut denied = wire::connect(address(&b)).unwrap();
+        wire::write_header(&mut denied, Kind::Bundle, prepared.bundle_len() + 64).unwrap();
+        denied.write_all(record.parcel_id.as_bytes()).unwrap();
+        assert!(wire::read_reply(&mut denied).is_err());
+        b.command(DirectCommand::AcceptOffer { parcel_id: record.parcel_id.clone() }).unwrap();
+        a.command(DirectCommand::Send { peer: PeerId(bc.fingerprint), parcel_id: record.parcel_id.clone() }).unwrap();
+        wait_until(|| b.snapshot().incoming.iter().any(|row| matches!(row.state, IncomingOfferState::ReadyToSave {..})));
+        assert_eq!(alice.deliveries().unwrap()[0].state, DeliveryState::WaitingReceipt);
+        assert!(bob.receipt_artifact(&record.parcel_id).is_err());
+        a.shutdown().unwrap(); b.shutdown().unwrap();
     }
 
 }

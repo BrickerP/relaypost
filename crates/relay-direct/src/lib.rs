@@ -45,6 +45,15 @@ pub struct NearbyPeer {
 pub struct IncomingPairing {
     pub id: PairingId,
     pub card: PeerCard,
+    pub state: IncomingPairingState,
+}
+
+#[derive(Clone, Debug)]
+pub enum IncomingPairingState {
+    AwaitingDecision,
+    Accepted,
+    Declined,
+    Failed { message: String },
 }
 
 #[derive(Clone, Debug)]
