@@ -222,7 +222,7 @@ pub(crate) fn snapshot(inputs: &[PathBuf], root: &Path) -> Result<(Manifest, Vec
     Ok((manifest, snapshots))
 }
 
-fn header(path: &str, bytes: u64) -> Result<tar::Header> {
+pub(crate) fn header(path: &str, bytes: u64) -> Result<tar::Header> {
     let mut h = tar::Header::new_ustar();
     h.set_path(path)?;
     h.set_entry_type(tar::EntryType::Regular);
@@ -258,7 +258,7 @@ pub(crate) fn pack(manifest: &[u8], snapshots: &[PathBuf], output: &Path) -> Res
 // entries separate archive metadata from user paths: the manifest alone maps
 // content order to validated destination names. No GNU/PAX extensions, links,
 // sparse files or implicit archive paths are interpreted.
-fn read_header(reader: &mut File, expected: &str, maximum: u64) -> Result<u64> {
+pub(crate) fn read_header(reader: &mut File, expected: &str, maximum: u64) -> Result<u64> {
     let mut block = [0u8; 512];
     reader.read_exact(&mut block)?;
     let h = tar::Header::from_byte_slice(&block);
@@ -299,7 +299,7 @@ fn read_header(reader: &mut File, expected: &str, maximum: u64) -> Result<u64> {
     Ok(size)
 }
 
-fn padding(reader: &mut File, bytes: u64) -> Result<()> {
+pub(crate) fn padding(reader: &mut File, bytes: u64) -> Result<()> {
     let pad = (512 - bytes % 512) % 512;
     let mut buffer = [0u8; 512];
     reader.read_exact(&mut buffer[..pad as usize])?;

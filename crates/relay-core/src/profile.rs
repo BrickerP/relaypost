@@ -10,6 +10,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod direct;
+pub use direct::{
+    DirectOffer, DirectOfferArtifact, PreparedDirectHandoff, ReceiptArtifact, StagedDirectParcel,
+    MAX_DIRECT_BUNDLE,
+};
+
 const ENVELOPE_COPIES: [(&str, &str); 2] = [
     ("envelope.json", "envelope.minisig"),
     ("envelope-copy.json", "envelope-copy.minisig"),
@@ -54,6 +60,8 @@ impl Profile {
             "acknowledgments",
             "work",
             "cancelled",
+            "direct",
+            "direct/incoming",
         ] {
             fsutil::private_dir(&profile.home.join(directory))?;
         }
@@ -416,11 +424,23 @@ impl Profile {
         let connection = store::open(&self.home)?;
         let receipt = fsutil::selected_directory(receipt)?;
         let raw = fsutil::read_bounded(&receipt.join("receipt.json"), MAX_ENVELOPE)?;
+        self.exact_entries(&receipt, &["receipt.json", "receipt.minisig"])?;
+        let signature = fsutil::read_bounded(&receipt.join("receipt.minisig"), 2048)?;
+        self.import_receipt_bytes(raw, fsutil::utf8(&signature)?.to_owned(), &connection)
+    }
+
+    fn import_receipt_bytes(
+        &self,
+        raw: Vec<u8>,
+        signature: String,
+        connection: &Connection,
+    ) -> Result<ParcelRecord> {
+        ensure!(raw.len() as u64 <= MAX_ENVELOPE && signature.len() <= 2048, "receipt exceeds resource bound");
         let claimed: Receipt = fsutil::json(&raw)?;
         fsutil::check_id(&claimed.parcel_id)?;
         let destination = self.home.join("acknowledgments").join(&claimed.parcel_id);
         let existing = if fs::symlink_metadata(&destination).is_ok() {
-            Some(self.read_acknowledgment(&destination, &connection)?)
+            Some(self.read_acknowledgment(&destination, connection)?)
         } else {
             None
         };
@@ -428,7 +448,7 @@ impl Profile {
         let authenticated = if let Some((authenticated, _, _)) = &existing {
             authenticated.clone()
         } else {
-            self.load_envelope(&source, &connection)
+            self.load_envelope(&source, connection)
                 .context("receipt has no authenticated original outgoing envelope")?
         };
         ensure!(
@@ -436,8 +456,8 @@ impl Profile {
                 && authenticated.envelope.parcel_id == claimed.parcel_id,
             "receipt is not for this sender"
         );
-        let (verified_raw, signature) = self.read_receipt(&receipt, &authenticated)?;
-        ensure!(verified_raw == raw, "receipt changed while importing");
+        self.verify_receipt_bytes(&raw, &signature, &authenticated)?;
+        let verified_raw = raw;
         if let Some((_, old_raw, old_sig)) = existing {
             ensure!(
                 old_raw == verified_raw && old_sig == signature,
@@ -457,11 +477,11 @@ impl Profile {
                 &staging.path().join("envelope.minisig"),
                 authenticated.signature.as_bytes(),
             )?;
-            self.read_acknowledgment(staging.path(), &connection)?;
+            self.read_acknowledgment(staging.path(), connection)?;
             fsutil::sync_tree(staging.path())?;
             fsutil::publish_noreplace(staging.path(), &destination)?;
         }
-        let mut record = store::get(&connection, &claimed.parcel_id, Direction::Outgoing)?
+        let mut record = store::get(connection, &claimed.parcel_id, Direction::Outgoing)?
             .unwrap_or_else(|| {
                 self.outgoing_record(
                     &authenticated.envelope,
@@ -472,11 +492,11 @@ impl Profile {
         record.state = DeliveryState::Confirmed;
         record.receipt_path = Some(destination);
         record.local_error = self
-            .verify_outgoing_copy(&source, &authenticated, &connection)
+            .verify_outgoing_copy(&source, &authenticated, connection)
             .err()
             .map(|error| format!("{error:#}"));
         record.updated_at = fsutil::now();
-        store::save(&connection, &record)?;
+        store::save(connection, &record)?;
         Ok(record)
     }
 
@@ -1187,14 +1207,24 @@ impl Profile {
         let raw = fsutil::read_bounded(&directory.join("receipt.json"), MAX_ENVELOPE)?;
         let signature = fsutil::read_bounded(&directory.join("receipt.minisig"), 2048)?;
         let signature = fsutil::utf8(&signature)?.to_owned();
-        let receipt: Receipt = fsutil::json(&raw)?;
+        self.verify_receipt_bytes(&raw, &signature, authenticated)?;
+        Ok((raw, signature))
+    }
+
+    fn verify_receipt_bytes(
+        &self,
+        raw: &[u8],
+        signature: &str,
+        authenticated: &AuthenticatedEnvelope,
+    ) -> Result<()> {
+        let receipt: Receipt = fsutil::json(raw)?;
         receipt.validate(&authenticated.envelope, &authenticated.raw)?;
         identity::verify(
             &authenticated.envelope.recipient.signing_public_key,
-            &raw,
-            &signature,
+            raw,
+            signature,
         )?;
-        Ok((raw, signature))
+        Ok(())
     }
 
     fn verify_outgoing_copy(
