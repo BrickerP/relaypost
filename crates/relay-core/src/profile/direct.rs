@@ -132,6 +132,31 @@ impl Profile {
         Ok(offer_details(&authenticated, artifact.bundle_bytes))
     }
 
+    /// Resolve a restarted transfer only when the exact authenticated offer is
+    /// already staged. A ciphertext ID alone cannot identify signed metadata.
+    pub fn existing_direct_offer(&self, artifact: &DirectOfferArtifact) -> Result<Option<StagedDirectParcel>> {
+        let _guard = fsutil::lock(&self.home)?;
+        let connection = store::open(&self.home)?;
+        let authenticated = self.authenticate_direct(artifact, &connection)?;
+        self.existing_direct_offer_unlocked(&authenticated, &connection)
+    }
+
+    fn existing_direct_offer_unlocked(&self, authenticated: &AuthenticatedEnvelope, connection: &Connection) -> Result<Option<StagedDirectParcel>> {
+        let root = self.home.join("direct/incoming");
+        fsutil::no_symlink_components(&root)?;
+        let destination = root.join(format!("{}.parcel", authenticated.envelope.parcel_id));
+        match fs::symlink_metadata(&destination) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+            Ok(_) => {}
+        }
+        let existing = self.load_envelope(&destination, connection)?;
+        ensure!(existing.raw == authenticated.raw && existing.signature == authenticated.signature, "conflicting direct parcel already staged");
+        let inspection = inspect_direct_directory(self, &destination, &existing)?;
+        ensure!(inspection.recoverable, "staged direct parcel exceeds repair budget");
+        Ok(Some(StagedDirectParcel { parcel_path: destination, inspection }))
+    }
+
     pub fn stage_direct_bundle(&self, artifact: &DirectOfferArtifact, bundle_file: &Path) -> Result<StagedDirectParcel> {
         let _guard = fsutil::lock(&self.home)?;
         let connection = store::open(&self.home)?;
@@ -148,19 +173,15 @@ impl Profile {
         ensure!(inspection.recoverable, "direct bundle exceeds repair budget");
         fsutil::sync_tree(staging.path())?;
         let destination = root.join(format!("{}.parcel", authenticated.envelope.parcel_id));
-        match fs::symlink_metadata(&destination) {
-            Ok(_) => {
-                let existing = self.load_envelope(&destination, &connection)?;
-                ensure!(existing.raw == authenticated.raw && existing.signature == authenticated.signature, "conflicting direct parcel already staged");
-                inspect_direct_directory(self, &destination, &existing)?;
+        match self.existing_direct_offer_unlocked(&authenticated, &connection)? {
+            Some(existing) => {
                 for (name, bytes) in bundle_entries(&authenticated) {
-                    ensure!(archive::hash_file(&destination.join(&name), bytes)? == archive::hash_file(&staging.path().join(&name), bytes)?, "staged direct parcel conflicts with retry bytes");
+                    ensure!(archive::hash_file(&existing.parcel_path.join(&name), bytes)? == archive::hash_file(&staging.path().join(&name), bytes)?, "staged direct parcel conflicts with retry bytes");
                 }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            None => {
                 fsutil::publish_noreplace(staging.path(), &destination)?;
             }
-            Err(error) => return Err(error.into()),
         }
         Ok(StagedDirectParcel { parcel_path: destination, inspection })
     }
@@ -327,4 +348,53 @@ fn inspect_direct_directory(profile: &Profile, path: &Path, authenticated: &Auth
     }
     let groups = codec::inspect(path, &authenticated.envelope.groups)?;
     Ok(Inspection { parcel_id: authenticated.envelope.parcel_id.clone(), sender: authenticated.envelope.sender.fingerprint.clone(), recipient: authenticated.envelope.recipient.fingerprint.clone(), ciphertext_bytes: authenticated.envelope.ciphertext_bytes, recoverable: groups.iter().all(|g| g.recoverable), groups })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::format::Envelope;
+
+    #[test]
+    fn restart_lookup_refuses_different_valid_metadata_for_same_ciphertext() -> Result<()> {
+        const PASSWORD: &str = "SYNTHETIC-direct-metadata-test-only";
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?;
+        let alice = Profile::open(root.join("alice"))?;
+        let bob = Profile::open(root.join("bob"))?;
+        let alice_card = alice.initialize("Synthetic Metadata Alice", PASSWORD)?;
+        let bob_card = bob.initialize("Synthetic Metadata Bob", PASSWORD)?;
+        alice.import_contact_card(&bob_card)?;
+        bob.import_contact_card(&alice_card)?;
+        alice.trust_contact(&bob_card.fingerprint)?;
+        bob.trust_contact(&alice_card.fingerprint)?;
+        let input = root.join("synthetic.txt");
+        fs::write(&input, b"Synthetic same-ciphertext metadata regression")?;
+        let record = alice.seal(&[input], &bob_card.fingerprint, PASSWORD)?;
+        let prepared = alice.prepare_direct_handoff(&record.parcel_id)?;
+        assert!(bob.existing_direct_offer(&prepared.offer)?.is_none());
+        let bundle = root.join("bundle.tar");
+        let mut output = fsutil::create_new(&bundle)?;
+        std::io::copy(&mut prepared.open_bundle()?, &mut output)?;
+        output.sync_all()?;
+        let staged = bob.stage_direct_bundle(&prepared.offer, &bundle)?;
+        let restarted_bob = Profile::open(root.join("bob"))?;
+        assert_eq!(restarted_bob.existing_direct_offer(&prepared.offer)?.unwrap().parcel_path, staged.parcel_path);
+
+        // The ciphertext digest deliberately stays identical. This is a real,
+        // independently valid signature, not a malformed-signature test.
+        let mut envelope: Envelope = fsutil::json(prepared.offer.envelope_json.as_bytes())?;
+        envelope.created_at = "2001-01-01T00:00:00.000Z".to_owned();
+        let raw = serde_json::to_vec(&envelope)?;
+        let unlocked = identity::unlock(&alice.home.join("identity"), PASSWORD)?;
+        let mut different = prepared.offer.clone();
+        different.envelope_json = fsutil::utf8(&raw)?.to_owned();
+        different.envelope_minisig = identity::sign(&unlocked.signing, &raw)?;
+        assert_eq!(restarted_bob.inspect_direct_offer(&different)?.parcel_id, record.parcel_id);
+        assert!(restarted_bob.existing_direct_offer(&different).is_err());
+        assert_eq!(restarted_bob.existing_direct_offer(&prepared.offer)?.unwrap().parcel_path, staged.parcel_path);
+        assert!(restarted_bob.deliveries()?.is_empty());
+        assert!(restarted_bob.receipt_artifact(&record.parcel_id).is_err());
+        Ok(())
+    }
 }
