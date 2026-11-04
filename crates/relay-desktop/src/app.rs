@@ -1172,7 +1172,11 @@ impl RelayApp {
                 }
                 if let Some(path) = self.receipt_exports.get(&result.record.parcel_id) {
                     ui.label(format!("A confirmation package was saved. Give it to {name} if you are completing this transfer offline."));
-                    value(ui, "Confirmation package saved to", &path.display().to_string());
+                    value(
+                        ui,
+                        "Confirmation package saved to",
+                        &path.display().to_string(),
+                    );
                 }
                 if ui
                     .add_enabled(
@@ -1426,7 +1430,11 @@ impl RelayApp {
                     {
                         ui.label("The signed confirmation is ready for automatic return on the local network while both apps are open.");
                         if let Some(path) = self.receipt_exports.get(&record.parcel_id) {
-                            value(ui, "Confirmation package saved to", &path.display().to_string());
+                            value(
+                                ui,
+                                "Confirmation package saved to",
+                                &path.display().to_string(),
+                            );
                         }
                         if ui.button("Save confirmation package…").clicked() {
                             self.choose_receipt_export(ui.ctx(), &record.parcel_id);
