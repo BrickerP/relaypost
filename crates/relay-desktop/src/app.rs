@@ -113,7 +113,7 @@ pub struct RelayApp {
     last_export: Option<(String, PathBuf)>,
     transfer_candidates: Vec<PathBuf>,
     receipt_candidates: Vec<PathBuf>,
-    receipt_exported: std::collections::HashSet<String>,
+    receipt_exports: std::collections::HashMap<String, PathBuf>,
     /// Guided demo session (owned here; moved into worker and returned).
     demo_session: Option<Box<DemoSession>>,
     /// Last known public demo snapshot.
@@ -172,7 +172,7 @@ impl RelayApp {
             last_export: None,
             transfer_candidates: Vec::new(),
             receipt_candidates: Vec::new(),
-            receipt_exported: std::collections::HashSet::new(),
+            receipt_exports: std::collections::HashMap::new(),
             demo_session: None,
             demo_snapshot: None,
         };
@@ -297,8 +297,8 @@ impl RelayApp {
                     Payload::ParcelExported { id, path } => {
                         self.last_export = Some((id, path));
                     }
-                    Payload::ReceiptExported(id) => {
-                        self.receipt_exported.insert(id);
+                    Payload::ReceiptExported { id, path } => {
+                        self.receipt_exports.insert(id, path);
                     }
                     Payload::ReceiptImported(record) => {
                         self.selected_delivery =
@@ -1170,8 +1170,9 @@ impl RelayApp {
                         self.start(ui.ctx(), Action::OpenFolder(path.clone()));
                     }
                 }
-                if self.receipt_exported.contains(&result.record.parcel_id) {
+                if let Some(path) = self.receipt_exports.get(&result.record.parcel_id) {
                     ui.label(format!("A confirmation package was saved. Give it to {name} if you are completing this transfer offline."));
+                    value(ui, "Confirmation package saved to", &path.display().to_string());
                 }
                 if ui
                     .add_enabled(
@@ -1303,7 +1304,7 @@ impl RelayApp {
                         match (&record.direction, &record.state) {
                             (Direction::Outgoing, DeliveryState::Ready) => 1,
                             (Direction::Incoming, DeliveryState::SavedReceiptReady)
-                                if !self.receipt_exported.contains(&record.parcel_id) =>
+                                if !self.receipt_exports.contains_key(&record.parcel_id) =>
                             {
                                 2
                             }
@@ -1424,6 +1425,9 @@ impl RelayApp {
                         && record.receipt_path.is_some()
                     {
                         ui.label("The signed confirmation is ready for automatic return on the local network while both apps are open.");
+                        if let Some(path) = self.receipt_exports.get(&record.parcel_id) {
+                            value(ui, "Confirmation package saved to", &path.display().to_string());
+                        }
                         if ui.button("Save confirmation package…").clicked() {
                             self.choose_receipt_export(ui.ctx(), &record.parcel_id);
                         }

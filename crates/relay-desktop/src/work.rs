@@ -87,7 +87,10 @@ pub enum Payload {
         id: String,
         path: PathBuf,
     },
-    ReceiptExported(String),
+    ReceiptExported {
+        id: String,
+        path: PathBuf,
+    },
     ReceiptImported(Box<ParcelRecord>),
     /// Name-only candidates. These have not been authenticated by discovery.
     TransferCandidates(Vec<PathBuf>),
@@ -239,10 +242,10 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             (notice.to_owned(), Payload::Received(Box::new(result)))
         }
         Action::ExportReceipt(id, carrier) => {
-            profile.export_receipt(&id, &carrier)?;
+            let path = profile.export_receipt(&id, &carrier)?;
             (
                 "Confirmation saved. Send it back to the sender.".to_owned(),
-                Payload::ReceiptExported(id),
+                Payload::ReceiptExported { id, path },
             )
         }
         Action::ImportReceipt(receipt) => {
