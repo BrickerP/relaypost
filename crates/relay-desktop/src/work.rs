@@ -31,10 +31,13 @@ pub enum Action {
     Trust(String),
     Seal(Vec<PathBuf>, String, Zeroizing<String>),
     ExportParcel(String, PathBuf),
+    FindTransfers(PathBuf),
+    FindReceipts(PathBuf),
     Inspect(PathBuf),
     Receive(PathBuf, Zeroizing<String>),
     ExportReceipt(String, PathBuf),
     ImportReceipt(PathBuf),
+    OpenFolder(PathBuf),
     Recover(Zeroizing<String>),
     DiscardIncomplete,
     Cancel(String),
@@ -49,30 +52,50 @@ pub enum Action {
 impl Action {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Refresh => "Reading local records…",
-            Self::Measure(_) => "Reading selected file sizes…",
-            Self::Initialize(..) => "Protecting this device's identity…",
-            Self::ExportCard(_) => "Exporting public identity card…",
-            Self::ImportContact(_) => "Verifying contact card…",
-            Self::Trust(_) => "Pinning verified fingerprint…",
-            Self::Seal(..) => "Snapshotting, encrypting, and sealing files…",
-            Self::ExportParcel(..) => "Copying and verifying parcel on carrier…",
-            Self::Inspect(_) => "Verifying signed envelope and shard health…",
-            Self::Receive(..) => "Repairing, decrypting, and validating batch…",
-            Self::ExportReceipt(..) => "Exporting signed receipt…",
-            Self::ImportReceipt(_) => "Verifying returned receipt…",
-            Self::Recover(_) => "Checking committed files and recovering local records…",
-            Self::DiscardIncomplete => "Discarding interrupted receive work…",
-            Self::Cancel(_) => "Cancelling future local exports…",
-            Self::DemoStart(_) => "Starting guided demo — creating synthetic profiles…",
-            Self::DemoAdvance(_) => "Advancing guided demo to next phase…",
-            Self::DemoCopyReport(..) => "Saving demo report to chosen location…",
+            Self::Refresh => "Checking this computer…",
+            Self::Measure(_) => "Checking selected files…",
+            Self::Initialize(..) => "Setting up this computer…",
+            Self::ExportCard(_) => "Saving your identity card…",
+            Self::ImportContact(_) => "Checking the identity card…",
+            Self::Trust(_) => "Saving the local safety-code check…",
+            Self::Seal(..) => "Protecting your files…",
+            Self::ExportParcel(..) => "Saving the transfer to the chosen folder…",
+            Self::FindTransfers(_) => "Looking for transfer folders…",
+            Self::FindReceipts(_) => "Looking for confirmation folders…",
+            Self::Inspect(_) => "Checking this transfer…",
+            Self::Receive(..) => "Restoring and saving your files…",
+            Self::ExportReceipt(..) => "Saving the confirmation to the chosen folder…",
+            Self::ImportReceipt(_) => "Verifying the delivery confirmation…",
+            Self::OpenFolder(_) => "Opening your saved files…",
+            Self::Recover(_) => "Checking saved files and records…",
+            Self::DiscardIncomplete => "Clearing unfinished temporary copies…",
+            Self::Cancel(_) => "Stopping future copies…",
+            Self::DemoStart(_) => "Preparing the walkthrough…",
+            Self::DemoAdvance(_) => "Running the next walkthrough step…",
+            Self::DemoCopyReport(..) => "Saving the walkthrough report…",
         }
     }
 }
 
 pub enum Payload {
     None,
+    Initialized,
+    CardExported,
+    ContactImported(Box<Contact>),
+    Trusted(String),
+    ParcelExported {
+        id: String,
+        path: PathBuf,
+    },
+    ReceiptExported {
+        id: String,
+        path: PathBuf,
+    },
+    ReceiptImported(Box<ParcelRecord>),
+    /// Name-only candidates. These have not been authenticated by discovery.
+    TransferCandidates(Vec<PathBuf>),
+    /// Name-only candidates. Import must verify their signed confirmations.
+    ReceiptCandidates(Vec<PathBuf>),
     Measured(u64),
     Sealed(Box<SealedDetails>),
     Inspected(Inspection),
@@ -101,7 +124,14 @@ pub struct Completed {
 }
 
 pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
-    let refresh = !matches!(&action, Action::Measure(_) | Action::Inspect(_));
+    let refresh = !matches!(
+        &action,
+        Action::Measure(_)
+            | Action::Inspect(_)
+            | Action::FindTransfers(_)
+            | Action::FindReceipts(_)
+            | Action::OpenFolder(_)
+    );
     let (notice, payload) = match action {
         Action::Refresh => (String::new(), Payload::None),
         Action::Measure(inputs) => {
@@ -121,34 +151,34 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::Initialize(name, password) => {
             profile.initialize(&name, &password)?;
             (
-                "Identity created. Exchange public cards and compare complete fingerprints."
-                    .to_owned(),
-                Payload::None,
+                "This computer is ready. Add the other computer to exchange files.".to_owned(),
+                Payload::Initialized,
             )
         }
         Action::ExportCard(output) => {
             profile.export_card(&output)?;
             (
-                format!("Public card exported to {}", output.display()),
-                Payload::None,
+                "Identity card saved. Share it with the other person so they can add this computer."
+                    .to_owned(),
+                Payload::CardExported,
             )
         }
         Action::ImportContact(input) => {
             let contact = profile.import_contact(&input)?;
             (
                 format!(
-                    "Imported {}. Compare the complete fingerprint before pinning trust.",
+                    "Identity card added for {}. Compare every group of the safety code before exchanging files.",
                     contact.card.name
                 ),
-                Payload::None,
+                Payload::ContactImported(Box::new(contact)),
             )
         }
         Action::Trust(fingerprint) => {
             profile.trust_contact(&fingerprint)?;
             (
-                "Contact fingerprint pinned. The other device must also trust your card."
+                "The other computer's safety code was checked here. The other person still needs to check this computer's code."
                     .to_owned(),
-                Payload::None,
+                Payload::Trusted(fingerprint),
             )
         }
         Action::Seal(inputs, recipient, password) => {
@@ -160,7 +190,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let inspection = profile.inspect_parcel(path)?;
             let file_bytes = directory_file_bytes(path)?;
             (
-                "Parcel sealed. Choose a carrier directory to export it.".to_owned(),
+                "Your files are protected for the selected recipient.".to_owned(),
                 Payload::Sealed(Box::new(SealedDetails {
                     record,
                     inspection,
@@ -169,57 +199,71 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             )
         }
         Action::ExportParcel(id, carrier) => {
-            let output = profile.export_parcel(&id, &carrier)?;
+            let path = profile.export_parcel(&id, &carrier)?;
             (
-                format!(
-                    "Parcel exported to {}. Awaiting a verified signed receipt.",
-                    output.display()
-                ),
-                Payload::None,
+                "Encrypted package saved. Give the package to the other person; delivery is not confirmed yet."
+                    .to_owned(),
+                Payload::ParcelExported { id, path },
+            )
+        }
+        Action::FindTransfers(root) => {
+            let candidates = discover_folders(&root, "parcel")?;
+            (
+                "Transfer folders found. Choose a transfer to check.".to_owned(),
+                Payload::TransferCandidates(candidates),
+            )
+        }
+        Action::FindReceipts(root) => {
+            let candidates = discover_folders(&root, "receipt")?;
+            (
+                "Confirmation folders found. Choose a confirmation to verify.".to_owned(),
+                Payload::ReceiptCandidates(candidates),
             )
         }
         Action::Inspect(parcel) => {
             let inspection = profile.inspect_parcel(&parcel)?;
+            if inspection.recipient != profile.public_card()?.fingerprint {
+                bail!("This transfer was prepared for another computer. Ask the sender to prepare it for this computer.");
+            }
             let notice = if inspection.recoverable {
-                "Signed envelope verified. Shards are sufficient to attempt receiving."
+                "Ready to receive. Any repairable damage will be restored while saving."
             } else {
-                "Signed envelope verified, but at least one group exceeds its repair budget."
+                "This copy is too damaged. Ask the sender to copy the prepared transfer again."
             };
             (notice.to_owned(), Payload::Inspected(inspection))
         }
         Action::Receive(parcel, password) => {
             let result = profile.receive_parcel(&parcel, &password)?;
             let notice = if result.duplicate {
-                "Previously saved batch verified. The existing delivery is reused."
+                "These files were already saved. RelayPost checked them again."
             } else {
-                "Batch verified and saved. Its signed receipt is ready to carry back."
+                "Files saved and checked."
             };
             (notice.to_owned(), Payload::Received(Box::new(result)))
         }
         Action::ExportReceipt(id, carrier) => {
-            let output = profile.export_receipt(&id, &carrier)?;
+            let path = profile.export_receipt(&id, &carrier)?;
             (
-                format!(
-                    "Signed receipt exported to {}. Carry it back to the sender.",
-                    output.display()
-                ),
-                Payload::None,
+                "Confirmation saved. Send it back to the sender.".to_owned(),
+                Payload::ReceiptExported { id, path },
             )
         }
         Action::ImportReceipt(receipt) => {
             let record = profile.import_receipt(&receipt)?;
             (
-                format!(
-                    "Recipient's signed confirmation verified for {}.",
-                    record.parcel_id
-                ),
-                Payload::None,
+                "Delivery confirmed. The other computer confirmed saving the complete transfer."
+                    .to_owned(),
+                Payload::ReceiptImported(Box::new(record)),
             )
+        }
+        Action::OpenFolder(folder) => {
+            open_saved_folder(&profile, &folder)?;
+            ("Your saved files are open.".to_owned(), Payload::None)
         }
         Action::Recover(password) => {
             let summary = profile.recover(&password)?;
             let notice = format!(
-                "Recovery finished: {} recovered, {} pending, {} conflicts.",
+                "Record check complete: {} restored, {} unfinished, {} need review.",
                 summary.recovered,
                 summary.pending,
                 summary.conflicts.len()
@@ -229,15 +273,16 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         Action::Cancel(id) => {
             profile.cancel(&id)?;
             (
-                "Future local exports cancelled. Copies already on a carrier remain valid."
-                    .to_owned(),
+                "Future copies are stopped. Copies already shared still work.".to_owned(),
                 Payload::None,
             )
         }
         Action::DiscardIncomplete => {
             let count = profile.discard_incomplete_receives()?;
             (
-                format!("Discarded {count} interrupted receive staging directories."),
+                format!(
+                    "Cleared {count} unfinished receive folders. Saved files were not changed."
+                ),
                 Payload::Discarded,
             )
         }
@@ -246,7 +291,8 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let session = DemoSession::start(root)?;
             let snapshot = session.snapshot();
             return Ok(Completed {
-                notice: "Demo started — profiles created, parcel sealed and exported.".to_owned(),
+                notice: "Walkthrough ready. Two example computers and their files are set up."
+                    .to_owned(),
                 snapshot: None,
                 payload: Payload::DemoUpdate {
                     session: Box::new(session),
@@ -264,17 +310,18 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             let snapshot = session.snapshot();
             let notice = match snapshot.phase {
                 relay_core::DemoPhase::Damaged => {
-                    "Demo damaged: data shards 0,1 deleted; parity 20,21 XOR'd; 5-erasure receive refused; shard 2 restored."
+                    "The example package copy is damaged. The app also checked that excessive damage is refused."
                         .to_owned()
                 }
                 relay_core::DemoPhase::Received => {
                     format!(
-                        "Demo received: {} shards repaired, SHA-256 hashes match.",
+                        "Example files saved. Repaired {} pieces and checked the contents.",
                         snapshot.repaired_shards.context("Received demo snapshot has no repaired-shard evidence")?
                     )
                 }
                 relay_core::DemoPhase::Confirmed => {
-                    "Demo confirmed: Alice's delivery is Confirmed.".to_owned()
+                    "Walkthrough complete. The sender verified the returned confirmation."
+                        .to_owned()
                 }
                 relay_core::DemoPhase::Prepared => {
                     bail!("Demo did not advance beyond Prepared. Run a new guided demo.")
@@ -309,7 +356,7 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
             dst.sync_all()
                 .with_context(|| format!("Error syncing report to {}", target.display()))?;
             return Ok(Completed {
-                notice: format!("Demo report saved to {}", target.display()),
+                notice: "Walkthrough report saved.".to_owned(),
                 snapshot: None,
                 payload: Payload::None,
             });
@@ -324,6 +371,90 @@ pub fn execute(profile: Profile, action: Action) -> Result<Completed> {
         },
         payload,
     })
+}
+
+// Discovery is a name-only presentation step. It does not open envelopes,
+// decrypt data, import confirmations, or establish trust. The selected folder
+// still goes through the corresponding authenticated relay-core operation.
+fn discover_folders(root: &Path, extension: &str) -> Result<Vec<PathBuf>> {
+    const MAX_ENTRIES: usize = 512;
+    const MAX_CANDIDATES: usize = 64;
+
+    let metadata = std::fs::symlink_metadata(root)
+        .with_context(|| format!("Cannot read the selected folder: {}", root.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!("Choose a drive or an actual folder, not a file or a folder shortcut.");
+    }
+    if root.extension() == Some(std::ffi::OsStr::new(extension)) {
+        return Ok(vec![root.to_path_buf()]);
+    }
+
+    let mut candidates = Vec::new();
+    for (index, entry) in std::fs::read_dir(root)
+        .with_context(|| format!("Cannot list the selected folder: {}", root.display()))?
+        .enumerate()
+    {
+        if index >= MAX_ENTRIES {
+            bail!("This folder has too many items to check at once. Choose the folder containing the RelayPost transfer or confirmation.");
+        }
+        let entry = entry.context("Cannot read an item in the selected folder")?;
+        let file_type = entry
+            .file_type()
+            .context("Cannot check an item in the selected folder")?;
+        if file_type.is_symlink() || !file_type.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension() == Some(std::ffi::OsStr::new(extension)) {
+            if candidates.len() >= MAX_CANDIDATES {
+                bail!("There are too many RelayPost folders here. Choose the individual transfer or confirmation you need.");
+            }
+            candidates.push(path);
+        }
+    }
+    candidates.sort();
+    if candidates.is_empty() {
+        let kind = if extension == "parcel" {
+            "transfer"
+        } else {
+            "confirmation"
+        };
+        bail!("No RelayPost {kind} folder was found here. Choose the drive or the folder that directly contains it.");
+    }
+    Ok(candidates)
+}
+
+fn open_saved_folder(profile: &Profile, folder: &Path) -> Result<()> {
+    let saved_here = profile.deliveries()?.iter().any(|record| {
+        matches!(&record.direction, relay_core::Direction::Incoming)
+            && record.received_path.as_deref() == Some(folder)
+    });
+    if !saved_here {
+        bail!("Choose a saved transfer in Activity before opening its files.");
+    }
+    let metadata = std::fs::symlink_metadata(folder)
+        .with_context(|| format!("Cannot find the saved folder: {}", folder.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        bail!(
+            "The saved folder is no longer available as a regular folder. Review its local record."
+        );
+    }
+    // Canonicalization gives the OS opener an absolute filesystem path, never
+    // an option, URL, shell command, or executable selected by the UI.
+    let folder = std::fs::canonicalize(folder).context("Cannot locate the saved folder")?;
+    let program = match std::env::consts::OS {
+        "macos" => "open",
+        "linux" => "xdg-open",
+        _ => bail!("Opening a saved folder is not supported on this operating system."),
+    };
+    let status = std::process::Command::new(program)
+        .arg(&folder)
+        .status()
+        .context("Cannot open the saved folder in the file manager")?;
+    if !status.success() {
+        bail!("The file manager could not open the saved folder. Review its location in the transfer details.");
+    }
+    Ok(())
 }
 
 // Presentation-only measurement of an app-owned sealed directory. Never follow
@@ -355,4 +486,103 @@ fn directory_file_bytes(root: &Path) -> Result<u64> {
         }
     }
     Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::discover_folders;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
+
+    struct SyntheticDirectory(PathBuf);
+
+    impl SyntheticDirectory {
+        fn new() -> Self {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "relaypost-synthetic-discovery-{}-{nonce}-{}",
+                std::process::id(),
+                NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::create_dir(&path).expect("create synthetic test directory");
+            Self(path)
+        }
+    }
+
+    impl Drop for SyntheticDirectory {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn direct_folder_and_drive_selection_use_the_same_candidates() {
+        let root = SyntheticDirectory::new();
+        let first = root.0.join("a.parcel");
+        let second = root.0.join("b.parcel");
+        std::fs::create_dir(&second).unwrap();
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(root.0.join("a.receipt")).unwrap();
+        std::fs::write(root.0.join("not-a-folder.parcel"), b"synthetic").unwrap();
+
+        assert_eq!(
+            discover_folders(&root.0, "parcel").unwrap(),
+            vec![first.clone(), second]
+        );
+        assert_eq!(discover_folders(&first, "parcel").unwrap(), vec![first]);
+        assert_eq!(
+            discover_folders(&root.0, "receipt").unwrap(),
+            vec![root.0.join("a.receipt")]
+        );
+    }
+
+    #[test]
+    fn discovery_does_not_search_nested_folders() {
+        let root = SyntheticDirectory::new();
+        std::fs::create_dir(root.0.join("unrelated")).unwrap();
+        std::fs::create_dir(root.0.join("unrelated/nested.parcel")).unwrap();
+
+        let error = discover_folders(&root.0, "parcel").unwrap_err();
+        assert!(error.to_string().contains("No RelayPost transfer folder"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discovery_refuses_selected_shortcuts_and_does_not_follow_child_links() {
+        let root = SyntheticDirectory::new();
+        let outside = SyntheticDirectory::new();
+        let link = root.0.join("shortcut.parcel");
+        std::os::unix::fs::symlink(&outside.0, &link).unwrap();
+
+        assert!(discover_folders(&link, "parcel").is_err());
+        assert!(discover_folders(&root.0, "parcel").is_err());
+    }
+
+    #[test]
+    fn discovery_reports_entry_limit_instead_of_a_partial_list() {
+        let root = SyntheticDirectory::new();
+        std::fs::create_dir(root.0.join("valid.parcel")).unwrap();
+        for index in 0..512 {
+            std::fs::write(root.0.join(format!("synthetic-{index}.txt")), b"").unwrap();
+        }
+
+        let error = discover_folders(&root.0, "parcel").unwrap_err();
+        assert!(error.to_string().contains("too many items"));
+    }
+
+    #[test]
+    fn discovery_reports_candidate_limit_instead_of_a_partial_list() {
+        let root = SyntheticDirectory::new();
+        for index in 0..65 {
+            std::fs::create_dir(root.0.join(format!("synthetic-{index}.parcel"))).unwrap();
+        }
+
+        let error = discover_folders(&root.0, "parcel").unwrap_err();
+        assert!(error.to_string().contains("too many RelayPost folders"));
+    }
 }

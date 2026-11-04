@@ -12,7 +12,7 @@ These instructions only execute the prebuilt binaries.
 
 1. Extract the candidate macOS bundle, verify the ZIP against its SHA-256 file,
    and open `RelayPost.app` on an Apple Silicon Mac.
-2. Click **Try guided demo**, or **Demo > Run new guided demo**. No identity setup, password or
+2. Open **Help & walkthrough**, then **Start a new walkthrough**. No identity setup, password or
    development toolchain is required. The app creates two disposable profiles
    and 21 MiB of synthetic files in a new directory separate from its normal
    profile. It displays that directory for inspection.
@@ -21,7 +21,7 @@ These instructions only execute the prebuilt binaries.
    and **Confirmed**. Check the four repaired shards, matching SHA-256 values,
    five-erasure receive refusal, and sender waiting until the signed receipt
    returns. The final `demo-report.json` is generated automatically;
-   **Export JSON report…** copies it to a new chosen filename.
+   **Save walkthrough evidence…** copies it to a new chosen filename.
 
 The GUI and CLI call the same `relay-core::DemoSession`; this is a real
 cryptographic/file-system workflow with pauses between actual stages. It uses
@@ -146,7 +146,7 @@ open -n /absolute/path/to/RelayPost.app --args \
   --home /absolute/path/to/new-synthetic-demo/bob
 ```
 
-Use separate application processes for Alice and Bob. The History screen should
+Use separate application processes for Alice and Bob. The Transfers screen should
 show Alice's confirmed outgoing delivery and Bob's saved incoming delivery. For
 a live walkthrough of the earlier states, create fresh profiles in new homes
 and follow the command sequence printed by the script. Unlock only with the
@@ -165,7 +165,7 @@ The workflow has four independent concerns:
 | Resolve dependencies | Requires the committed `Cargo.lock`, verifies dependency resolution with `cargo metadata --locked`, and retains the lock and dependency inventory. |
 | Rust formatting | Runs `cargo fmt --all -- --check`. On failure, retains the failing status and uploads a `format.patch`; it never commits a fix. |
 | Linux core and CLI | Runs integration and unit tests, Clippy with warnings denied, and the actual CLI sample. |
-| macOS arm64 native application | Tests both real macOS publication semantics and the CLI, builds the native interface, checks its Clippy warnings, runs the release CLI sample, and packages the app with a SHA-256 file. |
+| macOS arm64 native application | Tests real macOS publication semantics, the CLI and desktop task logic, builds the native interface, checks its Clippy warnings, runs the release CLI sample, and packages the app with a SHA-256 file. |
 
 Build and test logs, reports, lockfile and app artifacts are retained for 90 days.
 No workflow merges, publishes a GitHub Release, or uploads signing credentials.

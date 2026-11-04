@@ -17,6 +17,10 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub use profile::Profile;
+pub use profile::{
+    DirectOffer, DirectOfferArtifact, PreparedDirectHandoff, ReceiptArtifact, StagedDirectParcel,
+    MAX_DIRECT_BUNDLE,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

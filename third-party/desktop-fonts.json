@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "atkinson-hyperlegible-next",
+  "family": "Atkinson Hyperlegible Next",
+  "license": "OFL-1.1",
+  "repository": "https://github.com/googlefonts/atkinson-hyperlegible-next",
+  "upstream_commit": "7925f50f649b3813257faf2f4c0b381011f434f1",
+  "source_record": "crates/relay-desktop/assets/fonts/SOURCE.md",
+  "files": [
+    {
+      "path": "crates/relay-desktop/assets/fonts/AtkinsonHyperlegibleNext-Regular.ttf",
+      "kind": "font",
+      "style": "Regular",
+      "weight": 400,
+      "size": 65068,
+      "sha256": "88ed5c31a71584c7772963b02d04bef1eb7e3d2e9c8b9cb204339b1f82cf432c",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/7925f50f649b3813257faf2f4c0b381011f434f1/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf"
+    },
+    {
+      "path": "crates/relay-desktop/assets/fonts/AtkinsonHyperlegibleNext-Medium.ttf",
+      "kind": "font",
+      "style": "Medium",
+      "weight": 500,
+      "size": 67080,
+      "sha256": "dd50b08b3c560846097d23baaaf6a97ffa20dd077115d23c59df68083b9ea05e",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/7925f50f649b3813257faf2f4c0b381011f434f1/fonts/ttf/AtkinsonHyperlegibleNext-Medium.ttf"
+    },
+    {
+      "path": "crates/relay-desktop/assets/fonts/OFL.txt",
+      "kind": "license",
+      "size": 4431,
+      "sha256": "aca6a428580965d2297d1b718042dd427c2a9443ece3b0d02d758e161e0c4030",
+      "source_url": "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/7925f50f649b3813257faf2f4c0b381011f434f1/OFL.txt"
+    }
+  ]
+}

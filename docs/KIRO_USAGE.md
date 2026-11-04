@@ -17,6 +17,40 @@ The [project agent](../.kiro/agents/relaypost-product.json) exposes only file
 read/write tools and reads the project steering when directed; it cannot run
 local Rust commands. All Rust validation runs in GitHub Actions.
 
+## Novice desktop redesign
+
+On 2026-11-03, actual Kiro CLI session
+`141b6526-64d9-4803-b702-c3bffba6cab0` authored the novice UX requirements,
+design and task specification, plus the native `theme.rs` and `components.rs`.
+The file-only session completed successfully. Its components provide font,
+spacing and color configuration, accessible task controls and a handoff ribbon
+whose states represent actual local facts.
+
+Codex supplied the design brief, sourced the original licensed fonts, integrated
+the modules, implemented the production task orchestration and bounded drive
+discovery, and authored independent desktop logic tests. Review amendments,
+packaging and runtime walkthroughs remain separately attributed to Codex.
+
+The [novice UX evidence](../.kiro/evidence/novice-ux.md) records the actual write
+events and review changes. The corresponding
+[requirements](../.kiro/specs/novice-ux/requirements.md),
+[design](../.kiro/specs/novice-ux/design.md) and
+[tasks](../.kiro/specs/novice-ux/tasks.md) distinguish source implementation from
+remote checks and actual usability evidence. A generated layout is not proof
+that an independent novice completed a two-device exchange.
+
+## User-feedback and direct-delivery iteration
+
+The subsequent 2026-11-03 user-feedback iteration removes Home, simplifies
+recipient setup and adds local-network direct delivery as the primary workflow.
+That implementation and its transport/security tests are authored by Codex;
+the earlier Kiro inputs are retained as historical evidence rather than
+relabeled as the new flow. The current contracts are
+[product flow](UX_PRODUCT_FLOW.md) and
+[direct delivery](DIRECT_TRANSFER_CONTRACT.md). The original Kiro visual
+foundation and shared walkthrough remain in use with separately attributed
+integration changes.
+
 ## Earlier receive-recovery regression
 
 On 2026-11-02, a real Kiro CLI v2 session reviewed receive recovery and generated

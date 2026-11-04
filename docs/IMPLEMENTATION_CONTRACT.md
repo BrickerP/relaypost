@@ -86,7 +86,34 @@ public DTO, four phases, isolation and evidence requirements are defined in
 run uses a fresh private root, synthetic profiles and real production APIs.
 The JSON report is an unsigned evidence summary; the return receipt is signed.
 
-Use English UI and help, 4 screens: Send, Receive, History, Identity & Contacts. Show real group health and outcomes, no fake progress/results. Keep expensive work off the UI thread.
+Use English UI and help with Send, Receive, Transfers and Recipients destinations.
+Remove the duplicate Home route. The current product-flow contract is
+[UX_PRODUCT_FLOW.md](UX_PRODUCT_FLOW.md), based on actual user feedback; it
+supersedes the initial novice-UX specification's navigation and stacked People
+layout. The guided walkthrough remains available from Help.
+
+First use must explain device setup, the identity-card exchange, complete
+safety-code comparison and the intended task in sequence. A recipient is an
+identity, not proof of a live connection. Preparation is local packaging, not
+network delivery. Adding and verifying a recipient must return to the intended
+task with that exact recipient selected. Export results must show the actual
+returned carrier path rather than an inferred location.
+
+Selecting a carried transfer starts inspection automatically. Confirmation
+return stays a primary task in Transfers. Move the local identity and advanced
+storage information into This computer; paths, protocol identifiers, shard
+diagnostics and original errors belong in secondary details. Preserve complete
+safety-code verification, real group health and every recovery action. Never
+imply remote progress or confirmation without evidence. Keep expensive work off
+the UI thread.
+
+The approved direct delivery scope is local-network discovery and encrypted
+transfer, without a cloud relay or account service. Discovery and public-card
+exchange do not grant trust. Both devices explicitly verify the full safety
+codes. The receiver accepts a request before parcel data is written, then
+explicitly unlocks and saves through the existing core. Only that verified save
+creates the signed receipt; only importing that expected receipt confirms
+delivery. Direct transport and offline package delivery share these authorities.
 
 CLI shape: global --home; identity init/export, contacts import/trust/list, seal --to, export --carrier, inspect, receive, receipt export/import, deliveries, recover, cancel. `recover --discard-incomplete` performs only explicit staging discard and prints `discarded_staging`; no password is needed. Desktop discard requires a confirmation dialog. History selections use `(parcel_id, direction)` and show local-copy health separately. Password through masked interactive input, --password-stdin, or a password file; never a plaintext password argument. Structured --json output must not contain secrets.
 

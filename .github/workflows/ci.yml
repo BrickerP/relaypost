@@ -38,12 +38,19 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$RELAYPOST_SOURCE_SHA"
           echo "version=$(python3 scripts/release-metadata.py version)" >> "$GITHUB_OUTPUT"
-      - name: Verify the committed lockfile
+      - name: Verify the committed lockfile and capture a reviewable fix
         shell: bash
         run: |
           set -o pipefail
           mkdir -p ci-logs
-          cargo metadata --locked --format-version 1 > ci-logs/dependency-metadata.json
+          if cargo metadata --locked --format-version 1 > ci-logs/dependency-metadata.json 2> ci-logs/dependency-errors.log; then
+            exit 0
+          fi
+          cat ci-logs/dependency-errors.log
+          cargo metadata --format-version 1 > ci-logs/proposed-dependency-metadata.json
+          git diff --binary -- Cargo.lock > ci-logs/lock.patch
+          cp Cargo.lock ci-logs/proposed-Cargo.lock
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: cargo-lock
@@ -87,7 +94,7 @@ jobs:
           retention-days: 90
 
   linux:
-    name: Linux core and CLI
+    name: Linux core, direct transport and CLI
     needs: dependencies
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -109,17 +116,17 @@ jobs:
         with:
           key: linux-core-cli
           cache-on-failure: true
-      - name: Test core and CLI
+      - name: Test core, direct transport and CLI
         shell: bash
         run: |
           set -o pipefail
           mkdir -p ci-logs
-          cargo test --locked -p relay-core -p relay-cli --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
-      - name: Check core and CLI warnings
+          cargo test --locked -p relay-core -p relay-direct -p relay-cli --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+      - name: Check core, direct transport and CLI warnings
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy --locked -p relay-core -p relay-cli --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+          cargo clippy --locked -p relay-core -p relay-direct -p relay-cli --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
       - name: Build the CLI and run the isolated sample workflow
         shell: bash
         run: |
@@ -181,13 +188,13 @@ jobs:
         with:
           key: macos-arm64-native
           cache-on-failure: true
-      - name: Test core and CLI on the native publication implementation
+      - name: Test core, direct transport, CLI and desktop task logic on macOS
         shell: bash
         run: |
           set -o pipefail
           mkdir -p ci-logs
           uname -a | tee ci-logs/platform.log
-          cargo test --locked -p relay-core -p relay-cli --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
+          cargo test --locked -p relay-core -p relay-direct -p relay-cli -p relay-desktop --release --all-targets -- --nocapture 2>&1 | tee ci-logs/tests.log
       - name: Build the CLI and native application
         shell: bash
         run: |
@@ -206,7 +213,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo clippy --locked -p relay-desktop --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+          cargo clippy --locked -p relay-direct -p relay-desktop --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
       - name: Exercise the release CLI with isolated synthetic profiles
         shell: bash
         run: |
@@ -224,6 +231,25 @@ jobs:
           verify_dir="$(mktemp -d)"
           ditto -x -k dist/*.zip "$verify_dir"
           bash scripts/verify-package.sh "$verify_dir/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64" "$RELAYPOST_SOURCE_SHA" 2>&1 | tee ci-logs/archive-verification.log
+      - name: Package separately identified GUI test instances
+        shell: bash
+        run: |
+          set -o pipefail
+          qa_binaries="$RUNNER_TEMP/relaypost-gui-binaries"
+          for role in sender receiver; do
+            cargo rustc --locked -p relay-desktop --bin relay-desktop --release -- "-Cmetadata=relaypost_qa_${role}_${RELAYPOST_SOURCE_SHA}" 2>&1 | tee "ci-logs/gui-qa-$role-build.log"
+            mkdir -p "$qa_binaries/$role"
+            cp target/release/relay-desktop "$qa_binaries/$role/relay-desktop"
+          done
+          python3 scripts/package-gui-qa.py "dist/relaypost-${{ needs.dependencies.outputs.version }}-macos-arm64/RelayPost.app" "$RUNNER_TEMP/relaypost-gui-qa" "$qa_binaries" 2>&1 | tee ci-logs/gui-qa-package.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-qa-macos-arm64
+          path: |
+            ${{ runner.temp }}/relaypost-gui-qa.zip
+            ${{ runner.temp }}/relaypost-gui-qa.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         with:
           name: relaypost-macos-arm64

@@ -77,7 +77,36 @@ in `.kiro/specs/guided-demo/`.
 - **Existing dependencies only.** Do not add crates to any `Cargo.toml` that are
   not already present in the workspace.
 
-## Architecture
+## Approved product scope additions (novice UX, 2026-11-03)
+
+The user requested a real first-time, nontechnical-user walkthrough and a modern
+native UI redesign. The current code is a first submitted version, not a frozen
+product direction. This change replaces the original desktop presentation and
+orchestration directly; it does not add a classic mode, web shell or runtime AI.
+
+- Primary destinations are Home, Send, Receive, Activity and People. The existing
+  guided walkthrough moves to Help. A state-based Home recommends a next task
+  from locally verified delivery facts, never an invented remote event.
+- Device setup and adding a contact lead to explicit next actions. Explain
+  connection cards and complete safety-code comparison in ordinary language.
+  Keep full fingerprint comparison and both devices' trust requirements.
+- Connect prepare/copy, automatic carrier inspection/save, and returning/importing
+  signed confirmations into clear task flows. All operations still use the shared
+  core and its background desktop worker. A directory picker must help locate a
+  transfer on a chosen drive using bounded discovery, not require the user to
+  understand protocol directory names or recursively scan unrelated files.
+- Technical paths, hashes, IDs, shard grids and raw errors stay available under
+  expandable details. Only the expected recipient's verified signed receipt can
+  label an outgoing transfer confirmed. Copying to a drive is not remote delivery.
+- Use the bundled, original Atkinson Hyperlegible Next Regular and Medium TTFs
+  with the upstream OFL. Root owns distribution attribution and packaging.
+- The UX implementer/Kiro owns `crates/relay-desktop/src/**` and the new
+  `.kiro/specs/novice-ux/**` inputs. Root owns manifests, release tooling,
+  documentation, provenance review and CI. Font assets have a separate owner.
+  Do not modify core or CLI for this redesign or claim capabilities not present
+  in their public API. Existing no-local-Rust and file-only Kiro rules remain.
+
+## Shared core structure
 
 ```
 relaypost (clap CLI) ─┐
